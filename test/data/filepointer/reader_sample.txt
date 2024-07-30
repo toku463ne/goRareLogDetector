@@ -1,0 +1,6 @@
+apple melon banana
+lemon melon orange
+apple lemon melon orange
+lemon orange 
+apple lemon melon orange
+apple lemon melon melon
