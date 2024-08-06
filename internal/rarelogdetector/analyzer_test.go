@@ -3,8 +3,8 @@ package rarelogdetector
 import (
 	"fmt"
 	"goRareLogDetector/pkg/utils"
-	"strings"
 	"testing"
+	"time"
 )
 
 func Test_Analyzer_Run(t *testing.T) {
@@ -14,10 +14,12 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	logPathRegex := fmt.Sprintf("%s/sample.log*", testDir)
+	logPath := fmt.Sprintf("%s/sample.log*", testDir)
+	logFormat := `^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<message>.+)$`
+	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPathRegex, ".*", "", "", "", 3, 5, 6, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, "", "", 3, 3, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -29,87 +31,58 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	if err := a.Run(0); err != nil {
+	if err := a.Feed(0); err != nil {
 		t.Errorf("%v", err)
 		return
 	} else {
-		if err := utils.GetGotExpErr("lines processed", a.linesProcessed, 31); err != nil {
+		if err := utils.GetGotExpErr("lines processed", a.linesProcessed, 20); err != nil {
 			t.Errorf("%v", err)
 			return
 		}
 	}
 
-	if err := utils.GetGotExpErr("rowNo", a.rowID, int64(31)); err != nil {
+	if err := utils.GetGotExpErr("total count of phrases #1", len(a.trans.phrases.members), 6); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
-	if err := utils.GetGotExpErr("items count", a.trans.terms.CountAll(nil), 41); err != nil {
+	phraseID := a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006")
+	phraseCnt := a.trans.phrases.getCount(phraseID)
+	if err := utils.GetGotExpErr("phrase count", phraseCnt, 5); err != nil {
 		t.Errorf("%v", err)
 		return
-	}
-
-	var it string
-	itemIdx := getColIdx("items", "item")
-	fu := func(v []string) bool {
-		return strings.Contains(v[itemIdx], it)
-	}
-
-	it = "test100"
-	if err := utils.GetGotExpErr("items count test100",
-		a.trans.terms.CountAll(fu), 1); err != nil {
-		t.Errorf("%v", err)
-		return
-	}
-	it = "test102"
-	if err := utils.GetGotExpErr("items count test102",
-		a.trans.terms.CountAll(fu), 1); err != nil {
-		t.Errorf("%v", err)
-		return
-	}
-	it = "test3"
-	if err := utils.GetGotExpErr("items count test3*",
-		a.trans.terms.CountAll(fu), 31); err != nil {
-		t.Errorf("%v", err)
-		return
-	}
-
-	lastFileEpoch := 0
-	lastFileRow := 0
-
-	if err := a.lastStatusTable.Select1Row(nil,
-		[]string{"lastFileEpoch", "lastFileRow"},
-		&lastFileEpoch, &lastFileRow); err != nil {
-		t.Errorf("%v", err)
-		return
-	} else {
-		if lastFileEpoch == 0 || lastFileRow == 0 {
-			t.Errorf("lastStatus is not properly configured")
-			return
-		}
 	}
 
 	a.Close()
 
-	a, err = NewAnalyzer(dataDir, logPathRegex, ".*", "", "", "", 3, 5, 6, false)
-	if err != nil {
-		t.Errorf("%v", err)
-		return
-	}
+	time.Sleep(3000000000)
 
+	// New log added
 	if _, err := utils.CopyFile("../../test/data/rarelogdetector/analyzer/sample.log",
 		fmt.Sprintf("%s/sample.log", testDir)); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
-	if err := a.Run(0); err != nil {
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, "", "", 4, 5, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if err := a.Feed(0); err != nil {
 		t.Errorf("%v", err)
 		return
 	} else {
-		if err := utils.GetGotExpErr("lines processed", a.linesProcessed, 4); err != nil {
+		if err := utils.GetGotExpErr("lines processed", a.linesProcessed, 5); err != nil {
 			t.Errorf("%v", err)
 			return
 		}
 	}
+
+	if err := utils.GetGotExpErr("total count of phrases #2", len(a.trans.phrases.members), 8); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
 }

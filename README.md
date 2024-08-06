@@ -1,3 +1,5 @@
 ## Todo
 Change logging of csvdb 
-Support rotation of items
+Support day rotation
+Read from last
+Support index

@@ -17,11 +17,9 @@ type analyzer struct {
 	timestampLayout string
 	blockSize       int
 	maxBlocks       int
-	maxItemBlocks   int
 	configTable     *csvdb.Table
 	lastStatusTable *csvdb.Table
 	trans           *trans
-	rarePhrases     *rarePhrases
 	fp              *filepointer.FilePointer
 	filterRe        *regexp.Regexp
 	xFilterRe       *regexp.Regexp
@@ -34,7 +32,7 @@ type analyzer struct {
 
 func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	searchRegex, exludeRegex string,
-	maxBlocks, blockSize, maxItemBlocks int,
+	maxBlocks, blockSize int,
 	readOnly bool) (*analyzer, error) {
 	a := new(analyzer)
 	a.dataDir = dataDir
@@ -45,7 +43,6 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	a.xFilterRe = utils.GetRegex(exludeRegex)
 	a.blockSize = blockSize
 	a.maxBlocks = maxBlocks
-	a.maxItemBlocks = maxItemBlocks
 	a.readOnly = readOnly
 
 	if err := a.open(); err != nil {
@@ -112,7 +109,6 @@ func (a *analyzer) calcBlocks(totalCount int, nFiles int) {
 	}
 	m := float64(totalCount) / float64(nFiles)
 	a.maxBlocks = int(cLogCycle * (float64(m) / float64(a.blockSize)))
-	a.maxItemBlocks = a.maxBlocks * 5
 }
 
 func (a *analyzer) init() error {
@@ -122,8 +118,7 @@ func (a *analyzer) init() error {
 		}
 	}
 
-	trans, err := newTrans(a.dataDir, a.logFormat, a.timestampLayout,
-		a.maxItemBlocks, a.blockSize, true)
+	trans, err := newTrans(a.dataDir, a.logFormat, a.timestampLayout, a.maxBlocks, a.blockSize, true, a.readOnly)
 	if err != nil {
 		return err
 	}
@@ -147,7 +142,7 @@ func (a *analyzer) loadStatus() error {
 	if err := a.configTable.Select1Row(nil,
 		tableDefs["config"],
 		&a.logPath, &a.logFormat,
-		&a.blockSize, &a.maxBlocks, &a.maxItemBlocks,
+		&a.blockSize, &a.maxBlocks,
 		&filterReStr, &xFilterReStr); err != nil {
 		return err
 	}
@@ -234,13 +229,12 @@ func (a *analyzer) saveConfig() error {
 				"filterRe", "xFilterRe"}
 	*/
 	if err := a.configTable.Upsert(nil, map[string]interface{}{
-		"logPath":       a.logPath,
-		"logFormat":     a.logFormat,
-		"blockSize":     a.blockSize,
-		"maxBlocks":     a.maxBlocks,
-		"maxItemBlocks": a.maxItemBlocks,
-		"filterRe":      filterReStr,
-		"xFilterRe":     xFilterReStr,
+		"logPath":   a.logPath,
+		"logFormat": a.logFormat,
+		"blockSize": a.blockSize,
+		"maxBlocks": a.maxBlocks,
+		"filterRe":  filterReStr,
+		"xFilterRe": xFilterReStr,
 	}); err != nil {
 		return err
 	}
@@ -280,7 +274,53 @@ func (a *analyzer) Close() {
 	}
 }
 
-func (a *analyzer) Run(targetLinesCnt int) error {
+func (a *analyzer) Detect() error {
+	lastReadOnly := a.readOnly
+	a.readOnly = true
+	var err error
+	if a.fp == nil || !a.fp.IsOpen() {
+		a.fp, err = filepointer.NewFilePointer(a.logPath, a.lastFileEpoch, a.lastFileRow)
+		if err != nil {
+			return err
+		}
+		if err := a.fp.Open(); err != nil {
+			return err
+		}
+	}
+
+	for a.fp.Next() {
+		te := a.fp.Text()
+		if te == "" {
+			continue
+		}
+
+		if err := a.trans.tokenizeLine(te, true, false); err != nil {
+			return err
+		}
+
+		if a.fp.IsEOF && (!a.fp.IsLastFile()) {
+			if err := a.saveLastStatus(); err != nil {
+				return err
+			}
+		}
+		a.rowID++
+	}
+	a.fp.Close()
+	a.readOnly = lastReadOnly
+	return nil
+}
+
+func (a *analyzer) Feed(targetLinesCnt int) error {
+	if err := a.run(targetLinesCnt, true); err != nil {
+		return err
+	}
+	if err := a.run(targetLinesCnt, false); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *analyzer) run(targetLinesCnt int, registerPreTerms bool) error {
 	linesProcessed := 0
 	var err error
 
@@ -296,7 +336,9 @@ func (a *analyzer) Run(targetLinesCnt int) error {
 
 	for a.fp.Next() {
 		if linesProcessed > 0 && linesProcessed%cLogPerLines == 0 {
-			logrus.Printf("processed %d lines", linesProcessed)
+			if !registerPreTerms && !a.readOnly {
+				logrus.Printf("processed %d lines", linesProcessed)
+			}
 		}
 
 		te := a.fp.Text()
@@ -305,7 +347,7 @@ func (a *analyzer) Run(targetLinesCnt int) error {
 			continue
 		}
 
-		if err := a.trans.tokenizeLine(te, true); err != nil {
+		if err := a.trans.tokenizeLine(te, true, registerPreTerms); err != nil {
 			return err
 		}
 
@@ -321,10 +363,17 @@ func (a *analyzer) Run(targetLinesCnt int) error {
 			break
 		}
 	}
-	if err := a.commit(false); err != nil {
-		return err
+	if !registerPreTerms && !a.readOnly {
+		if err := a.commit(false); err != nil {
+			return err
+		}
+		logrus.Printf("processed %d lines", linesProcessed)
 	}
-	logrus.Printf("processed %d lines", linesProcessed)
+	if registerPreTerms {
+		a.trans.preTermRegistered = true
+		a.trans.calcStats()
+	}
 	a.linesProcessed = linesProcessed
+	a.fp.Close()
 	return nil
 }

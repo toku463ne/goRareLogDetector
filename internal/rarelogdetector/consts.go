@@ -5,9 +5,6 @@ const (
 	CDefaultNBlocks     = 0
 	CDefaultNItemBlocks = 0
 
-	cIntTrue  = 1
-	cIntFalse = 2
-
 	cIPReStr            = `[0-9]+\.[0-9]+\.[0-9]+.[0-9]+`
 	cWordReStr          = `[0-9\pL\p{Mc}\p{Mn}.%]{2,}`
 	cMaxNumDigits       = 3  // HTTP codes

@@ -10,14 +10,15 @@ import (
 
 type items struct {
 	*csvdb.CircuitDB
-	name        string
-	maxItemID   int
-	members     map[string]int
-	memberMap   map[int]string
-	counts      map[int]int
-	lastUpdates map[int]int64
-	currCounts  map[int]int
-	totalCount  int
+	name          string
+	maxItemID     int
+	members       map[string]int
+	memberMap     map[int]string
+	counts        map[int]int
+	lastUpdates   map[int]int64
+	currCounts    map[int]int
+	currItemCount int
+	totalCount    int
 }
 
 func newItems(dataDir, name string, maxBlocks int, useGzip bool) (*items, error) {
@@ -63,6 +64,9 @@ func (i *items) register(item string, addCount int, lastUpdate int64, isNew bool
 		i.members[item] = itemID
 		i.memberMap[itemID] = item
 		i.lastUpdates[itemID] = lastUpdate
+		if isNew {
+			i.currItemCount++
+		}
 	}
 	if addCount == 0 {
 		return itemID
@@ -116,6 +120,7 @@ func (i *items) getItemID(term string) int {
 
 func (i *items) clearCurrCount() {
 	i.currCounts = make(map[int]int, 10000)
+	i.currItemCount = 0
 }
 
 func (i *items) loadDB() error {
@@ -219,4 +224,40 @@ func (i *items) flush() error {
 		return errors.WithStack(err)
 	}
 	return nil
+}
+
+func (i *items) DeepCopy() *items {
+	copyItems := &items{
+		name:          i.name,
+		maxItemID:     i.maxItemID,
+		members:       make(map[string]int),
+		memberMap:     make(map[int]string),
+		counts:        make(map[int]int),
+		lastUpdates:   make(map[int]int64),
+		currCounts:    make(map[int]int),
+		currItemCount: i.currItemCount,
+		totalCount:    i.totalCount,
+	}
+
+	for k, v := range i.members {
+		copyItems.members[k] = v
+	}
+
+	for k, v := range i.memberMap {
+		copyItems.memberMap[k] = v
+	}
+
+	for k, v := range i.counts {
+		copyItems.counts[k] = v
+	}
+
+	for k, v := range i.lastUpdates {
+		copyItems.lastUpdates[k] = v
+	}
+
+	for k, v := range i.currCounts {
+		copyItems.currCounts[k] = v
+	}
+
+	return copyItems
 }

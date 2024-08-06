@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"syscall"
 	"time"
@@ -33,12 +34,25 @@ func RoundDown(num, places float64) float64 {
 	return math.Trunc(num*shift) / shift
 }
 
-func Str2Epoch(dateFormat, str string) (int64, error) {
-	if dt, err := time.Parse(dateFormat, str); err != nil {
-		return 0, errors.WithStack(err)
-	} else {
-		return dt.Unix(), nil
+func Str2date(dateFormat, dateStr string) (time.Time, error) {
+	parsedDate, err := time.Parse(dateFormat, dateStr)
+	if err != nil {
+		return parsedDate, err
 	}
+
+	currentTime := time.Now()
+	currentYear := currentTime.Year()
+	parsedMonth := parsedDate.Month()
+
+	// Check if the current month is earlier than the parsed month
+	if currentTime.Month() < parsedMonth {
+		currentYear--
+	}
+
+	finalDate := time.Date(currentYear, parsedMonth, parsedDate.Day(),
+		parsedDate.Hour(), parsedDate.Minute(), parsedDate.Second(), 0, time.Local)
+
+	return finalDate, nil
 }
 
 // roundInt
@@ -278,4 +292,27 @@ func QuickSortFloatInt(a []float64, s []int, i, j int) {
 
 func TimespecToTime(ts syscall.Timespec) time.Time {
 	return time.Unix(int64(ts.Sec), int64(ts.Nsec))
+}
+
+// Struct to hold the value and its original index
+type ValueIndex struct {
+	Value float64
+	Index int
+}
+
+func SortIndexByValue(values []float64, isAsc bool) []int {
+	indexes := make([]int, len(values))
+	for i, _ := range values {
+		indexes[i] = i
+	}
+	if isAsc {
+		sort.Slice(indexes, func(i, j int) bool {
+			return values[i] < values[j]
+		})
+	} else {
+		sort.Slice(indexes, func(i, j int) bool {
+			return values[i] > values[j]
+		})
+	}
+	return indexes
 }
