@@ -316,3 +316,18 @@ func SortIndexByValue(values []float64, isAsc bool) []int {
 	}
 	return indexes
 }
+
+func AddDaysToEpoch(epoch int64, days int) int64 {
+	epochTime := time.Unix(epoch, 0)
+	epochTime = epochTime.AddDate(0, 0, days)
+	return epochTime.Unix()
+}
+
+func StringToInt64(s string) int64 {
+	// Use strconv.ParseInt to convert string to int64
+	i, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return i
+}

@@ -6,7 +6,6 @@ import (
 	"goRareLogDetector/pkg/filepointer"
 	"goRareLogDetector/pkg/utils"
 	"regexp"
-	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -19,6 +18,7 @@ type analyzer struct {
 	timestampLayout string
 	blockSize       int
 	maxBlocks       int
+	daysToKeep      int
 	configTable     *csvdb.Table
 	lastStatusTable *csvdb.Table
 	trans           *trans
@@ -39,7 +39,7 @@ type phraseCnt struct {
 
 func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	searchRegex, exludeRegex string,
-	maxBlocks, blockSize int,
+	maxBlocks, blockSize, daysToKeep int,
 	readOnly bool) (*analyzer, error) {
 	a := new(analyzer)
 	a.dataDir = dataDir
@@ -50,6 +50,7 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	a.xFilterRe = utils.GetRegex(exludeRegex)
 	a.blockSize = blockSize
 	a.maxBlocks = maxBlocks
+	a.daysToKeep = daysToKeep
 	a.readOnly = readOnly
 
 	if err := a.open(); err != nil {
@@ -125,7 +126,8 @@ func (a *analyzer) init() error {
 		}
 	}
 
-	trans, err := newTrans(a.dataDir, a.logFormat, a.timestampLayout, a.maxBlocks, a.blockSize, true, a.readOnly)
+	trans, err := newTrans(a.dataDir, a.logFormat, a.timestampLayout,
+		a.maxBlocks, a.blockSize, a.daysToKeep, true, a.readOnly)
 	if err != nil {
 		return err
 	}
@@ -336,15 +338,7 @@ func (a *analyzer) TopN(N, minCnt, days int) ([]phraseScore, error) {
 	if err := a.Feed(0); err != nil {
 		return nil, err
 	}
-	// Convert lastUpdated to time.Time
-	lastUpdatedTime := time.Unix(a.trans.latestUpdate, 0)
-
-	// Calculate N days before lastUpdated
-	NdaysBefore := lastUpdatedTime.AddDate(0, 0, -N)
-
-	// Convert back to epoch timestamp
-	maxLastUpdate := NdaysBefore.Unix()
-
+	maxLastUpdate := utils.AddDaysToEpoch(a.trans.latestUpdate, -N)
 	phraseScores := a.trans.getTopNScores(N, minCnt, maxLastUpdate)
 
 	return phraseScores, nil

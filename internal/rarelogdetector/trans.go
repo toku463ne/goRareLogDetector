@@ -38,17 +38,17 @@ type phraseScore struct {
 }
 
 func newTrans(dataDir, logFormat, timestampLayout string,
-	maxBlocks, blockSize int, useGzip, readOnly bool) (*trans, error) {
+	maxBlocks, blockSize, daysToKeep int, useGzip, readOnly bool) (*trans, error) {
 	t := new(trans)
-	te, err := newItems(dataDir, "terms", maxBlocks, useGzip)
+	te, err := newItems(dataDir, "terms", maxBlocks, daysToKeep, useGzip)
 	if err != nil {
 		return nil, err
 	}
-	pte, err := newItems("", "terms", 0, false)
+	pte, err := newItems("", "terms", 0, daysToKeep, false)
 	if err != nil {
 		return nil, err
 	}
-	p, err := newItems(dataDir, "phrases", maxBlocks, useGzip)
+	p, err := newItems(dataDir, "phrases", maxBlocks, daysToKeep, useGzip)
 	if err != nil {
 		return nil, err
 	}

@@ -126,13 +126,13 @@ func Test_Items(t *testing.T) {
 
 	maxBlocks := 3
 	//tl, err := newTableLogRecords(dataDir, maxBlocks, maxRowsInBlock)
-	it, err := newItems(dataDir, "items", maxBlocks, false)
+	it, err := newItems(dataDir, "items", maxBlocks, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 	it.DropAll()
-	it, err = newItems(dataDir, "items", maxBlocks, false)
+	it, err = newItems(dataDir, "items", maxBlocks, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -316,7 +316,7 @@ func Test_Items(t *testing.T) {
 
 	it = nil
 
-	it, err = newItems(dataDir, "items", maxBlocks, false)
+	it, err = newItems(dataDir, "items", maxBlocks, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -377,4 +377,139 @@ func Test_Items(t *testing.T) {
 	}
 
 	it = nil
+}
+
+func Test_ItemsWithDays(t *testing.T) {
+	registerTran := func(epoch int64, it *items, itemCount int, a ...string) error {
+		for _, item := range a {
+			if itemID := it.register(item, itemCount, epoch, "", true); itemID < 0 {
+				return errors.New("Failed to register the item " + item)
+			}
+		}
+		return nil
+	}
+	registerTrans := func(epoch int64, it *items, a [][]string, goNextBlock bool) error {
+		for _, tran := range a {
+			if err := registerTran(epoch, it, 1, tran...); err != nil {
+				return err
+			}
+		}
+		if goNextBlock {
+			if err := it.next(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	blockExists := func(it *items, blockNo int) bool {
+		cnt := it.CountFromStatusTable(func(v []string) bool {
+			return v[csvdb.ColBlockNo] == strconv.Itoa(blockNo)
+		})
+		return cnt > 0
+	}
+
+	dataDir, err := utils.InitTestDir("itemsTest")
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	daysToKeep := 3
+	maxBlocks := 4
+
+	it, err := newItems(dataDir, "items", maxBlocks, daysToKeep, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	// block 0
+	ep := int64(1722438000) //2024-08-01 00:00:00
+	inRows := [][]string{
+		{"test100", "test200", "test301"},
+		{"test100", "test200", "test302"},
+	}
+	if err := registerTrans(ep, it, inRows, true); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if err := utils.GetGotExpErr("block 0 exists", blockExists(it, 0), true); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("block 1 exists", blockExists(it, 1), false); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	// block 1
+	ep = utils.AddDaysToEpoch(ep, 1)
+	inRows = [][]string{
+		{"test100", "test201", "test303"},
+		{"test100", "test201", "test304"},
+	}
+	if err := registerTrans(ep, it, inRows, true); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("block 1 exists", blockExists(it, 1), true); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	// block 2
+	ep = utils.AddDaysToEpoch(ep, 1)
+	inRows = [][]string{
+		{"test100", "test202", "test305"},
+		{"test100", "test202", "test306"},
+	}
+	if err := registerTrans(ep, it, inRows, true); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	// block 3
+	ep = utils.AddDaysToEpoch(ep, 1)
+	inRows = [][]string{
+		{"test100", "test203", "test307"},
+		{"test100", "test203", "test308"},
+	}
+	if err := registerTrans(ep, it, inRows, true); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	// the fist block must be removed because of expiration
+	if err := utils.GetGotExpErr("block 0 exists", blockExists(it, 0), false); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("block 3 exists", blockExists(it, 3), true); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	// block 4
+	ep = utils.AddDaysToEpoch(ep, 1)
+	inRows = [][]string{
+		{"test100", "test204", "test309"},
+		{"test100", "test204", "test310"},
+	}
+	if err := registerTrans(ep, it, inRows, true); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	// block is over 1 cicle. So go back to block 0
+	if err := utils.GetGotExpErr("block 0 exists", blockExists(it, 0), true); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	// block 1 must be removed because of expiration
+	if err := utils.GetGotExpErr("block 1 exists", blockExists(it, 0), false); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
 }

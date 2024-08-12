@@ -23,10 +23,10 @@ type items struct {
 	totalCount    int
 }
 
-func newItems(dataDir, name string, maxBlocks int, useGzip bool) (*items, error) {
+func newItems(dataDir, name string, maxBlocks, daysToKeep int, useGzip bool) (*items, error) {
 	i := new(items)
 	// Now: maxRowsInBlock=0 TODO: support rotation and change this
-	d, err := csvdb.NewCircuitDB(dataDir, name, tableDefs["items"], maxBlocks, 0, useGzip)
+	d, err := csvdb.NewCircuitDB(dataDir, name, tableDefs["items"], maxBlocks, 0, daysToKeep, useGzip)
 	if err != nil {
 		return nil, err
 	}
@@ -201,12 +201,15 @@ func (i *items) next() error {
 		var item string
 		var itemCount int
 		var lastUpdate int64
-		err = rows.Scan(&itemCount, &lastUpdate, &item)
+		var lastValue string
+		err = rows.Scan(&itemCount, &lastUpdate, &item, &lastValue)
 		if err != nil {
 			return err
 		}
 		itemID := i.getItemID(item)
 		i.counts[itemID] -= itemCount
+		i.lastUpdates[itemID] = lastUpdate
+		i.lastValues[itemID] = lastValue
 	}
 
 	return nil

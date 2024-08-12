@@ -2,6 +2,7 @@ package csvdb
 
 import (
 	"fmt"
+	"goRareLogDetector/pkg/utils"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -15,6 +16,7 @@ type CircuitDB struct {
 	maxBlocks   int
 	blockSize   int
 	blockNo     int
+	daysToKeep  int
 	statusTable *Table
 	lastIndex   int64
 	lastEpoch   int64
@@ -33,11 +35,12 @@ var (
 )
 
 func NewCircuitDB(rootDir, name string, columns []string,
-	maxBlocks, blockSize int, useGzip bool) (*CircuitDB, error) {
+	maxBlocks, blockSize, daysToKeep int, useGzip bool) (*CircuitDB, error) {
 	cdb := new(CircuitDB)
 	cdb.Name = name
 	cdb.blockSize = blockSize
 	cdb.maxBlocks = maxBlocks
+	cdb.daysToKeep = daysToKeep
 
 	if rootDir == "" {
 		return cdb, nil
@@ -180,6 +183,49 @@ func (cdb *CircuitDB) InsertRow(columns []string, row ...interface{}) error {
 	return nil
 }
 
+func (cdb *CircuitDB) deleteOldBlocks() error {
+	if cdb.DataDir == "" {
+		return nil
+	}
+
+	if cdb.daysToKeep == 0 {
+		return nil
+	}
+
+	oldEpoch := utils.AddDaysToEpoch(cdb.lastEpoch, -cdb.daysToKeep)
+
+	selectOldBlocks := func(v []string) bool {
+		lastEpoch := utils.StringToInt64(v[ColLastEpoch])
+		return lastEpoch < oldEpoch
+	}
+
+	rows, err := cdb.SelectFromStatusTable(selectOldBlocks, []string{"blockNo"})
+
+	if err != nil {
+		return err
+	}
+
+	var blockNo int
+	for rows.Next() {
+		if err := rows.Scan(&blockNo); err != nil {
+			return err
+		}
+		if t, err := cdb.GetBlockTable(blockNo); err != nil {
+			return err
+		} else {
+			if err := t.Delete(nil); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := cdb.statusTable.Delete(selectOldBlocks); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (cdb *CircuitDB) UpdateBlockStatus(completed bool) error {
 	if cdb.DataDir == "" {
 		return nil
@@ -197,6 +243,10 @@ func (cdb *CircuitDB) UpdateBlockStatus(completed bool) error {
 		"completed": completed,
 	}); err != nil {
 		return errors.WithStack(err)
+	}
+
+	if err := cdb.deleteOldBlocks(); err != nil {
+		return nil
 	}
 
 	return nil

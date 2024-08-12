@@ -27,6 +27,7 @@ var (
 	timestampLayout    string
 	maxBlocks          int
 	blockSize          int
+	daysToKeep         int
 	nLastLinesToDetect int
 	N                  int
 	M                  int
@@ -125,7 +126,7 @@ func loadConfig(path string) error {
 func run() error {
 	a, err := rarelogdetector.NewAnalyzer(dataDir, logPath, logFormat, timestampLayout,
 		searchString, excludeString,
-		maxBlocks, blockSize,
+		maxBlocks, blockSize, daysToKeep,
 		readOnly)
 	if err != nil {
 		return err
