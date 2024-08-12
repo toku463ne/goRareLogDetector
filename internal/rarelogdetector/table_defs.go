@@ -6,6 +6,6 @@ var (
 			"blockSize", "maxBlocks",
 			"filterRe", "xFilterRe"},
 		"lastStatus": {"lastRowID", "lastFileEpoch", "lastFileRow"},
-		"items":      {"count", "lastUpdate", "item"},
+		"items":      {"count", "lastUpdate", "item", "lastValue"},
 	}
 )

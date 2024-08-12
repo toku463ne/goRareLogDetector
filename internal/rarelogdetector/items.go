@@ -1,6 +1,7 @@
 package rarelogdetector
 
 import (
+	"container/heap"
 	"math"
 
 	"goRareLogDetector/pkg/csvdb"
@@ -16,6 +17,7 @@ type items struct {
 	memberMap     map[int]string
 	counts        map[int]int
 	lastUpdates   map[int]int64
+	lastValues    map[int]string
 	currCounts    map[int]int
 	currItemCount int
 	totalCount    int
@@ -35,6 +37,7 @@ func newItems(dataDir, name string, maxBlocks int, useGzip bool) (*items, error)
 	i.members = make(map[string]int, 10000)
 	i.currCounts = make(map[int]int, 10000)
 	i.lastUpdates = make(map[int]int64, 10000)
+	i.lastValues = make(map[int]string, 10000)
 	i.maxItemID = 0
 
 	return i, nil
@@ -49,7 +52,7 @@ func (i *items) load() error {
 	return nil
 }
 
-func (i *items) register(item string, addCount int, lastUpdate int64, isNew bool) int {
+func (i *items) register(item string, addCount int, lastUpdate int64, lastValue string, isNew bool) int {
 	if item == "" {
 		return -1
 	}
@@ -72,6 +75,8 @@ func (i *items) register(item string, addCount int, lastUpdate int64, isNew bool
 		return itemID
 	}
 
+	i.lastValues[itemID] = lastValue
+
 	i.counts[itemID] += addCount
 	if isNew {
 		i.currCounts[itemID] += addCount
@@ -85,6 +90,20 @@ func (i *items) getMember(itemID int) string {
 		return "-"
 	}
 	return i.memberMap[itemID]
+}
+
+func (i *items) getLastUpdate(itemID int) int64 {
+	if itemID < 0 {
+		return 0
+	}
+	return i.lastUpdates[itemID]
+}
+
+func (i *items) getLastValue(itemID int) string {
+	if itemID < 0 {
+		return ""
+	}
+	return i.lastValues[itemID]
 }
 
 func (i *items) getIdf(itemID int) float64 {
@@ -148,11 +167,12 @@ func (i *items) loadDB() error {
 		var item string
 		var itemCount int
 		var lastUpdate int64
-		err = rows.Scan(&itemCount, &lastUpdate, &item)
+		var lastValue string
+		err = rows.Scan(&itemCount, &lastUpdate, &item, &lastValue)
 		if err != nil {
 			return err
 		}
-		i.register(item, itemCount, lastUpdate, !rows.BlockCompleted)
+		i.register(item, itemCount, lastUpdate, lastValue, !rows.BlockCompleted)
 	}
 	return nil
 }
@@ -214,9 +234,10 @@ func (i *items) flush() error {
 			continue
 		}
 		member := i.getMember(itemID)
-		lastUpdate := i.lastUpdates[itemID]
+		lastUpdate := i.getLastUpdate(itemID)
+		lastValue := i.getLastValue(itemID)
 		if err := i.InsertRow(tableDefs["items"],
-			cnt, lastUpdate, member); err != nil {
+			cnt, lastUpdate, member, lastValue); err != nil {
 			return err
 		}
 	}
@@ -234,6 +255,7 @@ func (i *items) DeepCopy() *items {
 		memberMap:     make(map[int]string),
 		counts:        make(map[int]int),
 		lastUpdates:   make(map[int]int64),
+		lastValues:    make(map[int]string),
 		currCounts:    make(map[int]int),
 		currItemCount: i.currItemCount,
 		totalCount:    i.totalCount,
@@ -255,9 +277,61 @@ func (i *items) DeepCopy() *items {
 		copyItems.lastUpdates[k] = v
 	}
 
+	for k, v := range i.lastValues {
+		copyItems.lastValues[k] = v
+	}
+
 	for k, v := range i.currCounts {
 		copyItems.currCounts[k] = v
 	}
 
 	return copyItems
+}
+
+// An Item represents an element in the priority queue
+type Item struct {
+	itemID     int
+	lastUpdate int64
+}
+
+// A MinHeap is a priority queue for Items based on lastUpdate (min-heap)
+type MinHeap []Item
+
+func (h MinHeap) Len() int           { return len(h) }
+func (h MinHeap) Less(i, j int) bool { return h[i].lastUpdate < h[j].lastUpdate }
+func (h MinHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+
+func (h *MinHeap) Push(x interface{}) {
+	*h = append(*h, x.(Item))
+}
+
+func (h *MinHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	item := old[n-1]
+	*h = old[0 : n-1]
+	return item
+}
+
+// Method of items to get the last N itemIDs with count M
+func (i *items) getLastNItemsWithCountM(N int, M int) []int {
+	h := &MinHeap{}
+	heap.Init(h)
+
+	for itemID, count := range i.counts {
+		if count == M {
+			lastUpdate := i.lastUpdates[itemID]
+			heap.Push(h, Item{itemID: itemID, lastUpdate: lastUpdate})
+			if h.Len() > N {
+				heap.Pop(h)
+			}
+		}
+	}
+
+	// Collect results from the heap
+	result := make([]int, h.Len())
+	for k := len(result) - 1; k >= 0; k-- {
+		result[k] = heap.Pop(h).(Item).itemID
+	}
+	return result
 }

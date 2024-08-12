@@ -1,10 +1,12 @@
 package rarelogdetector
 
 import (
+	"fmt"
 	"goRareLogDetector/pkg/csvdb"
 	"goRareLogDetector/pkg/filepointer"
 	"goRareLogDetector/pkg/utils"
 	"regexp"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -28,6 +30,11 @@ type analyzer struct {
 	rowID           int64
 	readOnly        bool
 	linesProcessed  int
+}
+
+type phraseCnt struct {
+	count int
+	line  string
 }
 
 func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
@@ -127,7 +134,7 @@ func (a *analyzer) init() error {
 }
 
 func (a *analyzer) loadStatus() error {
-	if a.dataDir != "" && !a.readOnly {
+	if a.dataDir != "" {
 		if err := a.prepareDB(); err != nil {
 			return err
 		}
@@ -170,13 +177,11 @@ func (a *analyzer) load() error {
 }
 
 func (a *analyzer) prepareDB() error {
-	if a.readOnly {
-		return nil
-	}
 	d, err := csvdb.NewCsvDB(a.dataDir)
 	if err != nil {
 		return err
 	}
+
 	ct, err := d.CreateTableIfNotExists("config", tableDefs["config"], false, 1, 1)
 	if err != nil {
 		return err
@@ -274,9 +279,7 @@ func (a *analyzer) Close() {
 	}
 }
 
-func (a *analyzer) Detect() error {
-	lastReadOnly := a.readOnly
-	a.readOnly = true
+func (a *analyzer) initFilePointer() error {
 	var err error
 	if a.fp == nil || !a.fp.IsOpen() {
 		a.fp, err = filepointer.NewFilePointer(a.logPath, a.lastFileEpoch, a.lastFileRow)
@@ -287,58 +290,99 @@ func (a *analyzer) Detect() error {
 			return err
 		}
 	}
-
-	for a.fp.Next() {
-		te := a.fp.Text()
-		if te == "" {
-			continue
-		}
-
-		if err := a.trans.tokenizeLine(te, true, false); err != nil {
-			return err
-		}
-
-		if a.fp.IsEOF && (!a.fp.IsLastFile()) {
-			if err := a.saveLastStatus(); err != nil {
-				return err
-			}
-		}
-		a.rowID++
-	}
-	a.fp.Close()
-	a.readOnly = lastReadOnly
 	return nil
 }
 
 func (a *analyzer) Feed(targetLinesCnt int) error {
-	if err := a.run(targetLinesCnt, true); err != nil {
+	logrus.Infof("Counting terms")
+	if _, err := a._run(targetLinesCnt, true, 0); err != nil {
 		return err
 	}
-	if err := a.run(targetLinesCnt, false); err != nil {
+	logrus.Infof("Analyzing log")
+	if _, err := a._run(targetLinesCnt, false, 0); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (a *analyzer) run(targetLinesCnt int, registerPreTerms bool) error {
-	linesProcessed := 0
-	var err error
+func (a *analyzer) Detect(nLastLinesToDetect int) ([]phraseCnt, error) {
+	logrus.Debug("Starting term registration")
+	if _, err := a._run(0, true, 0); err != nil {
+		return nil, err
+	}
+	logrus.Debug("Completed term registration")
 
-	if a.fp == nil || !a.fp.IsOpen() {
-		a.fp, err = filepointer.NewFilePointer(a.logPath, a.lastFileEpoch, a.lastFileRow)
-		if err != nil {
-			return err
+	logrus.Debug("Starting log analyzing")
+	results, err := a._run(0, false, nLastLinesToDetect)
+	if err != nil {
+		return nil, err
+	}
+	logrus.Debug("Completed log analyzing")
+	return results, nil
+}
+
+func (a *analyzer) DetectAndShow(nLastLinesToDetect int) error {
+	results, err := a.Detect(nLastLinesToDetect)
+	if err != nil {
+		return err
+	}
+	for _, res := range results {
+		fmt.Printf("%d,%s\n", res.count, res.line)
+	}
+	return nil
+}
+
+func (a *analyzer) TopN(N, minCnt, days int) ([]phraseScore, error) {
+	if err := a.Feed(0); err != nil {
+		return nil, err
+	}
+	// Convert lastUpdated to time.Time
+	lastUpdatedTime := time.Unix(a.trans.latestUpdate, 0)
+
+	// Calculate N days before lastUpdated
+	NdaysBefore := lastUpdatedTime.AddDate(0, 0, -N)
+
+	// Convert back to epoch timestamp
+	maxLastUpdate := NdaysBefore.Unix()
+
+	phraseScores := a.trans.getTopNScores(N, minCnt, maxLastUpdate)
+
+	return phraseScores, nil
+}
+
+func (a *analyzer) TopNShow(N, minCnt, days int) error {
+	var err error
+	var phraseScores []phraseScore
+	phraseScores, err = a.TopN(N, minCnt, days)
+	if err != nil {
+		return err
+	}
+
+	for _, res := range phraseScores {
+		fmt.Printf("%d,%f,%s\n", res.count, res.score, res.text)
+	}
+	return nil
+}
+
+func (a *analyzer) _run(targetLinesCnt int, registerPreTerms bool, nLastLinesToDetect int) ([]phraseCnt, error) {
+	var results []phraseCnt
+	linesProcessed := 0
+	minLineToDetect := -1
+
+	if nLastLinesToDetect > 0 {
+		minLineToDetect = a.trans.totalLines - nLastLinesToDetect
+		if minLineToDetect < 0 {
+			minLineToDetect = 1
 		}
-		if err := a.fp.Open(); err != nil {
-			return err
-		}
+	}
+
+	if err := a.initFilePointer(); err != nil {
+		return nil, err
 	}
 
 	for a.fp.Next() {
 		if linesProcessed > 0 && linesProcessed%cLogPerLines == 0 {
-			if !registerPreTerms && !a.readOnly {
-				logrus.Printf("processed %d lines", linesProcessed)
-			}
+			logrus.Infof("processed %d lines", linesProcessed)
 		}
 
 		te := a.fp.Text()
@@ -347,16 +391,24 @@ func (a *analyzer) run(targetLinesCnt int, registerPreTerms bool) error {
 			continue
 		}
 
-		if err := a.trans.tokenizeLine(te, true, registerPreTerms); err != nil {
-			return err
+		cnt, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), true, registerPreTerms)
+		if err != nil {
+			return nil, err
 		}
 
 		if a.fp.IsEOF && (!a.fp.IsLastFile()) {
 			if err := a.saveLastStatus(); err != nil {
-				return err
+				return nil, err
 			}
 		}
 		linesProcessed++
+
+		if minLineToDetect >= 1 && linesProcessed > minLineToDetect {
+			p := new(phraseCnt)
+			p.count = cnt
+			p.line = te
+			results = append(results, *p)
+		}
 
 		a.rowID++
 		if targetLinesCnt > 0 && linesProcessed >= targetLinesCnt {
@@ -365,9 +417,9 @@ func (a *analyzer) run(targetLinesCnt int, registerPreTerms bool) error {
 	}
 	if !registerPreTerms && !a.readOnly {
 		if err := a.commit(false); err != nil {
-			return err
+			return nil, err
 		}
-		logrus.Printf("processed %d lines", linesProcessed)
+		logrus.Infof("processed %d lines", linesProcessed)
 	}
 	if registerPreTerms {
 		a.trans.preTermRegistered = true
@@ -375,5 +427,5 @@ func (a *analyzer) run(targetLinesCnt int, registerPreTerms bool) error {
 	}
 	a.linesProcessed = linesProcessed
 	a.fp.Close()
-	return nil
+	return results, nil
 }

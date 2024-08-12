@@ -4,27 +4,37 @@ import (
 	"goRareLogDetector/pkg/utils"
 	"math"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
 
 type trans struct {
-	terms           *items
-	preTerms        *items
-	phrases         *items
-	replacer        *strings.Replacer
-	logFormatRe     *regexp.Regexp
-	timestampLayout string
-	timestampPos    int
-	messagePos      int
-	blockSize       int
-	//currYearDay       int
+	terms             *items
+	preTerms          *items
+	phrases           *items
+	phraseScores      map[int]float64
+	replacer          *strings.Replacer
+	logFormatRe       *regexp.Regexp
+	timestampLayout   string
+	timestampPos      int
+	messagePos        int
+	blockSize         int
 	lastMessage       string
 	preTermRegistered bool
-	//maxDays         int
-	scoreAvg float64
-	scoreStd float64
-	readOnly bool
+	scoreAvg          float64
+	scoreStd          float64
+	readOnly          bool
+	totalLines        int
+	minLineToDetect   int
+	latestUpdate      int64
+}
+
+type phraseScore struct {
+	phraseID int
+	count    int
+	score    float64
+	text     string
 }
 
 func newTrans(dataDir, logFormat, timestampLayout string,
@@ -52,6 +62,10 @@ func newTrans(dataDir, logFormat, timestampLayout string,
 	t.timestampLayout = timestampLayout
 	t.preTermRegistered = false
 	t.readOnly = readOnly
+	t.totalLines = 0
+	t.minLineToDetect = 0
+	t.phraseScores = make(map[int]float64, 10000)
+
 	//t.maxDays = maxDays
 
 	return t, nil
@@ -135,7 +149,7 @@ func (t *trans) calcStats() {
 	t.scoreStd = std
 }
 
-func (t *trans) registerPhrase(tokens []int, lastUpdate int64, registerItem bool) []int {
+func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string, registerItem bool) int {
 	var te *items
 	if t.preTermRegistered {
 		te = t.preTerms
@@ -172,6 +186,8 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, registerItem bool
 					newLen = i //apply "i-1" as index, as len it is "i"
 					break
 				}
+			} else {
+				newLen = i + 1
 			}
 		}
 
@@ -201,8 +217,19 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, registerItem bool
 	if registerItem {
 		addCnt = 1
 	}
-	t.phrases.register(phrasestr, addCnt, lastUpdate, registerItem)
-	return phrase
+	phraseID := t.phrases.register(phrasestr, addCnt, lastUpdate, lastValue, registerItem)
+	ss := 0.0
+	for _, v := range scores {
+		ss += v
+	}
+	score := ss / float64(n)
+	t.phraseScores[phraseID] = score
+
+	if lastUpdate > t.latestUpdate {
+		t.latestUpdate = lastUpdate
+	}
+
+	return phraseID
 }
 
 func (t *trans) toTermList(line string, lastUpdate int64, registerItem, registerPreTerms bool) ([]int, error) {
@@ -237,9 +264,9 @@ func (t *trans) toTermList(line string, lastUpdate int64, registerItem, register
 				continue
 			}
 			if registerPreTerms {
-				termID = t.preTerms.register(word, addCnt, lastUpdate, registerItem)
+				termID = t.preTerms.register(word, addCnt, lastUpdate, "", registerItem)
 			} else {
-				termID = t.terms.register(word, addCnt, lastUpdate, registerItem)
+				termID = t.terms.register(word, addCnt, lastUpdate, "", registerItem)
 			}
 			tokens = append(tokens, termID)
 		}
@@ -248,11 +275,12 @@ func (t *trans) toTermList(line string, lastUpdate int64, registerItem, register
 	return tokens, nil
 }
 
-func (t *trans) tokenizeLine(line string, registerItem, registerPreTerms bool) error {
+func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registerPreTerms bool) (int, error) {
 	var lastdt time.Time
 	var err error
+	phraseCnt := -1
 	//yearDay := 0
-	lastUpdate := int64(0)
+	lastUpdate := fileEpoch
 	if t.timestampPos >= 0 || t.messagePos >= 0 {
 		match := t.logFormatRe.FindStringSubmatch(line)
 		if t.timestampPos >= 0 && t.timestampLayout != "" {
@@ -265,29 +293,30 @@ func (t *trans) tokenizeLine(line string, registerItem, registerPreTerms bool) e
 			line = match[t.messagePos]
 		}
 		//yearDay = lastdt.Year()*1000 + lastdt.YearDay()
-	} else {
-		lastUpdate = time.Now().Unix()
 	}
 
 	t.lastMessage = line
 
 	tokens, err := t.toTermList(line, lastUpdate, registerItem, registerPreTerms)
 	if err != nil {
-		return err
+		return -1, err
 	}
 
-	if !registerPreTerms {
-		t.registerPhrase(tokens, lastUpdate, registerItem)
-		if !t.readOnly && t.phrases.currItemCount >= t.blockSize {
+	if registerPreTerms {
+		t.totalLines++
+	} else {
+		phraseID := t.registerPhrase(tokens, lastUpdate, line, registerItem)
+		if t.phrases.DataDir != "" && !t.readOnly && t.phrases.currItemCount >= t.blockSize {
 			if err := t.next(); err != nil {
-				return err
+				return -1, err
 			}
 		}
+		phraseCnt = t.phrases.getCount(phraseID)
 	}
 
 	//t.currYearDay = yearDay
 
-	return nil
+	return phraseCnt, nil
 }
 
 // Rotate phrases and terms together to remove oldest items in the same timeline
@@ -302,4 +331,30 @@ func (t *trans) next() error {
 		return err
 	}
 	return nil
+}
+
+func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64) []phraseScore {
+	phraseScores := t.phraseScores
+
+	var scores []phraseScore
+	for phraseID, score := range phraseScores {
+		cnt := t.phrases.getCount(phraseID)
+		lastUpdate := t.phrases.getLastUpdate(phraseID)
+		text := t.phrases.getLastValue(phraseID)
+		if cnt <= minCnt && (maxLastUpdate == 0 || lastUpdate >= maxLastUpdate) {
+			scores = append(scores, phraseScore{phraseID, cnt, score, text})
+		}
+	}
+
+	// Sort the slice by score in descending order
+	sort.Slice(scores, func(i, j int) bool {
+		return scores[i].score > scores[j].score
+	})
+
+	// Get the top N key-score pairs
+	if len(scores) > N {
+		scores = scores[:N]
+	}
+
+	return scores
 }

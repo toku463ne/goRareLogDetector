@@ -50,4 +50,12 @@ initialize_go_module
 # Install necessary Go libraries
 install_go_libraries
 
+echo go clean -cache -modcache -i -r
+go clean -cache -modcache -i -r
+
+echo go build -o rarelog cmd/logdetector/main.go
+go build -o rarelog cmd/logdetector/main.go
+
+chmod +x rarelog
+
 echo "Setup complete."
