@@ -268,9 +268,9 @@ func (a *analyzer) saveConfig() error {
 	*/
 	if err := a.configTable.Upsert(nil, map[string]interface{}{
 		"logPath":   a.logPath,
-		"logFormat": a.logFormat,
 		"blockSize": a.blockSize,
 		"maxBlocks": a.maxBlocks,
+		"logFormat": a.logFormat,
 		"filterRe":  filterReStr,
 		"xFilterRe": xFilterReStr,
 	}); err != nil {

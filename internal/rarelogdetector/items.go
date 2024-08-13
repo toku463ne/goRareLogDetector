@@ -128,13 +128,6 @@ func (i *items) getCount(itemID int) int {
 	return i.counts[itemID]
 }
 
-func (i *items) getFrequency(itemID int) float64 {
-	if i.totalCount == 0 {
-		return 0.0
-	}
-	return float64(i.counts[itemID]) / float64(i.totalCount)
-}
-
 func (i *items) getItemID(term string) int {
 	itemID, ok := i.members[term]
 	if !ok {
