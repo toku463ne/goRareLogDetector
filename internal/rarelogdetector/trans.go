@@ -222,6 +222,11 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 		indexes := utils.SortIndexByValue(gaps, true)
 		newLen := minLen
 		for i := minLen; i < n; i++ {
+			// cannot be bigger than cMaxGapToRegister
+			if gaps[indexes[i]] < cMaxGapToRegister {
+				newLen = i
+				break
+			}
 			if gaps[indexes[i]] > cGapInPhrases {
 				if gaps[indexes[i]] > gaps[indexes[i-1]] {
 					newLen = i //apply "i-1" as index, as len it is "i"
@@ -325,14 +330,18 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 	lastUpdate := fileEpoch
 	if t.timestampPos >= 0 || t.messagePos >= 0 {
 		match := t.logFormatRe.FindStringSubmatch(line)
-		if t.timestampPos >= 0 && t.timestampLayout != "" && len(match) > t.timestampPos {
-			lastdt, err = utils.Str2date(t.timestampLayout, match[t.timestampPos])
-		}
-		if err == nil {
-			lastUpdate = lastdt.Unix()
-		}
-		if t.messagePos >= 0 && len(match) > t.messagePos {
-			line = match[t.messagePos]
+		if len(match) > 0 {
+			if t.timestampPos >= 0 && t.timestampLayout != "" && len(match) > t.timestampPos {
+				lastdt, err = utils.Str2date(t.timestampLayout, match[t.timestampPos])
+			}
+			if err == nil {
+				lastUpdate = lastdt.Unix()
+			}
+			if lastUpdate > 0 {
+				if t.messagePos >= 0 && len(match) > t.messagePos {
+					line = match[t.messagePos]
+				}
+			}
 		}
 		yearDay = lastdt.Year()*1000 + lastdt.YearDay()
 	}

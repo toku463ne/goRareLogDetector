@@ -11,7 +11,7 @@ func Test_tokenizeLine(t *testing.T) {
 
 	// openvpn log
 	pattern := `^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<host_ip>\d+\.\w+\.\w+\.\d+) openvpn\[\d+\]: (?P<source_ip>\d+\.\w+\.\w+\.\d+):\d+ (?P<message>.+)$`
-	dateFormat := "Jan 2 15:04:05"
+	dateFormat := "Jan  2 15:04:05"
 	tr, err := newTrans("", pattern, dateFormat, 0, 1000, 0, nil, nil, false, false)
 	if err != nil {
 		t.Errorf("%v", err)
@@ -107,6 +107,31 @@ func Test_tokenizeLine(t *testing.T) {
 
 	//itemID = tr.terms.getItemID("openvpn")
 	if err := utils.GetGotExpErr("other message", tr.lastMessage, `Jul 31 20:24:33 192.168.67.51 openvpn[12781]: 125.30.90.192:1194 peer info: IV_LZ4=1`); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+}
+
+func Test_tokenizeLine_regex(t *testing.T) {
+	var err error
+	cnt := -1
+
+	// openvpn log
+	pattern := `^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<host_ip>\d+\.\w+\.\w+\.\d+) openvpn\[\d+\]: .+:\d+ (?P<message>.+)$`
+	dateFormat := "Jan 2 15:04:05"
+	tr, err := newTrans("", pattern, dateFormat, 0, 1000, 0, nil, nil, false, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	line := "Jul 31 20:24:33 192.168.67.51 openvpn[12781]: 125.30.90.192:1194 peer info: IV_LZ4=1"
+	if cnt, err = tr.tokenizeLine(line, 0, true, false); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if err := utils.GetGotExpErr("item count", cnt, 1); err != nil {
 		t.Errorf("%v", err)
 		return
 	}

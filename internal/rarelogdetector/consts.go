@@ -19,5 +19,6 @@ const (
 	cErrorKeywords      = "failure|failed|error|down|crit"
 	cNFilesToCheckCount = 5
 	cGapInPhrases       = 1.0
+	cMaxGapToRegister   = 3.0
 	cCountbyScoreLen    = 100
 )
