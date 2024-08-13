@@ -175,14 +175,14 @@ func (a *analyzer) loadStatus() error {
 	filterReStr := ""
 	xFilterReStr := ""
 	/*
-		{"logPath", "logFormat",
-			"blockSize", "maxBlocks", "maxItemBlocks",
-			"filterRe", "xFilterRe"},
+		"config": {"logPath", "blockSize", "maxBlocks",
+			"logFormat", "filterRe", "xFilterRe"}
 	*/
 	if err := a.configTable.Select1Row(nil,
 		tableDefs["config"],
-		&a.logPath, &a.logFormat,
+		&a.logPath,
 		&a.blockSize, &a.maxBlocks,
+		&a.logFormat,
 		&filterReStr, &xFilterReStr); err != nil {
 		return err
 	}
