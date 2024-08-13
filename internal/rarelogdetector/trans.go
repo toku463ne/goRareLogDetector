@@ -316,13 +316,13 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 	lastUpdate := fileEpoch
 	if t.timestampPos >= 0 || t.messagePos >= 0 {
 		match := t.logFormatRe.FindStringSubmatch(line)
-		if t.timestampPos >= 0 && t.timestampLayout != "" {
+		if t.timestampPos >= 0 && t.timestampLayout != "" && len(match) > t.timestampPos {
 			lastdt, err = utils.Str2date(t.timestampLayout, match[t.timestampPos])
 		}
 		if err == nil {
 			lastUpdate = lastdt.Unix()
 		}
-		if t.messagePos >= 0 {
+		if t.messagePos >= 0 && len(match) > t.messagePos {
 			line = match[t.messagePos]
 		}
 		yearDay = lastdt.Year()*1000 + lastdt.YearDay()
