@@ -191,7 +191,7 @@ func (i *items) next() error {
 	}
 
 	i.clearCurrCount()
-	i.NextBlock()
+	i.NextBlock(i.lastUpdate)
 
 	// in case the block table already exists and will be overrided
 	// we subtract counts in the block table from total item counts

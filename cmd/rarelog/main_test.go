@@ -10,7 +10,7 @@ import (
 
 func Test_main1(t *testing.T) {
 	logPathRegex := "../../test/data/rarelogdetector/analyzer/sample.log"
-	os.Args = []string{"rarelog", "-m", "detect", "-f", logPathRegex, "-n", "1"}
+	os.Args = []string{"rarelog", "-m", "detect", "-f", logPathRegex}
 	main()
 }
 

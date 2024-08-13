@@ -18,23 +18,22 @@ import (
 var (
 	configPath string
 
-	debug              bool
-	silent             bool
-	readOnly           bool
-	dataDir            string
-	logPath            string
-	searchString       string
-	excludeString      string
-	mode               string
-	logFormat          string
-	timestampLayout    string
-	maxBlocks          int
-	blockSize          int
-	daysToKeep         int
-	nLastLinesToDetect int
-	N                  int
-	M                  int
-	D                  int
+	debug           bool
+	silent          bool
+	readOnly        bool
+	dataDir         string
+	logPath         string
+	searchString    string
+	excludeString   string
+	mode            string
+	logFormat       string
+	timestampLayout string
+	maxBlocks       int
+	blockSize       int
+	daysToKeep      int
+	N               int
+	M               int
+	D               int
 )
 
 type config struct {
@@ -58,7 +57,6 @@ func init() {
 	flag.StringVar(&searchString, "s", "", "Search string")
 	flag.StringVar(&excludeString, "x", "", "Exclude string")
 	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed")
-	flag.IntVar(&nLastLinesToDetect, "n", 0, "Number of the last log lines to check rarity in detect mode")
 	flag.IntVar(&N, "N", 0, "Show Top N rare logs in topN mode")
 	flag.IntVar(&M, "M", 0, "Show ony logs appeared M times in topN mode")
 	flag.IntVar(&D, "D", 0, "Recent days to show in topN mode")
@@ -205,7 +203,7 @@ func run() error {
 	case "feed":
 		err = a.Feed(0)
 	case "detect":
-		err = a.DetectAndShow(nLastLinesToDetect)
+		err = a.DetectAndShow()
 	case "topN":
 		err = a.TopNShow(N, M, D)
 	default:

@@ -30,6 +30,9 @@ type trans struct {
 	latestUpdate      int64
 	filterRe          *regexp.Regexp
 	xFilterRe         *regexp.Regexp
+	currYearDay       int
+	countByDay        int
+	maxCountByDay     int
 }
 
 type phraseScore struct {
@@ -71,6 +74,8 @@ func newTrans(dataDir, logFormat, timestampLayout string,
 	t.phraseScores = make(map[int]float64, 10000)
 	t.filterRe = filterRe
 	t.xFilterRe = xFilterRe
+	t.countByDay = 0
+	t.maxCountByDay = 0
 
 	//t.maxDays = maxDays
 
@@ -307,7 +312,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 	var err error
 	orgLine := line
 	phraseCnt := -1
-	//yearDay := 0
+	yearDay := 0
 	lastUpdate := fileEpoch
 	if t.timestampPos >= 0 || t.messagePos >= 0 {
 		match := t.logFormatRe.FindStringSubmatch(line)
@@ -320,7 +325,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 		if t.messagePos >= 0 {
 			line = match[t.messagePos]
 		}
-		//yearDay = lastdt.Year()*1000 + lastdt.YearDay()
+		yearDay = lastdt.Year()*1000 + lastdt.YearDay()
 	}
 
 	t.lastMessage = line
@@ -330,11 +335,13 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 		return -1, err
 	}
 
+	t.countByDay++
+
 	if registerPreTerms {
 		t.totalLines++
 	} else {
 		phraseID := t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, 0)
-		if t.phrases.DataDir != "" && !t.readOnly && t.phrases.currItemCount >= t.blockSize {
+		if t.phrases.DataDir != "" && !t.readOnly && (t.phrases.currItemCount >= t.blockSize || yearDay > t.currYearDay) {
 			if err := t.next(); err != nil {
 				return -1, err
 			}
@@ -342,7 +349,13 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 		phraseCnt = t.phrases.getCount(phraseID)
 	}
 
-	//t.currYearDay = yearDay
+	if yearDay > t.currYearDay {
+		if t.countByDay > t.maxCountByDay {
+			t.maxCountByDay = t.countByDay
+		}
+		t.countByDay = 0
+	}
+	t.currYearDay = yearDay
 
 	return phraseCnt, nil
 }

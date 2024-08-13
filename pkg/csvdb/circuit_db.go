@@ -111,7 +111,7 @@ func (cdb *CircuitDB) LoadCircuitDBStatus() error {
 	cdb.writeMode = CWriteModeAppend
 
 	if completed {
-		if err := cdb.NextBlock(); err != nil {
+		if err := cdb.NextBlock(lastEpoch); err != nil {
 			return err
 		}
 	}
@@ -125,7 +125,9 @@ func (cdb *CircuitDB) LoadCircuitDBStatus() error {
 	return nil
 }
 
-func (cdb *CircuitDB) NextBlock() error {
+func (cdb *CircuitDB) NextBlock(lastEpoch int64) error {
+	cdb.lastEpoch = lastEpoch
+
 	if err := cdb.UpdateBlockStatus(true); err != nil {
 		return err
 	}
@@ -192,7 +194,7 @@ func (cdb *CircuitDB) deleteOldBlocks() error {
 		return nil
 	}
 
-	oldEpoch := utils.AddDaysToEpoch(cdb.lastEpoch, -cdb.daysToKeep)
+	oldEpoch := utils.AddDaysToEpoch(cdb.lastEpoch, -cdb.daysToKeep) + 1
 
 	selectOldBlocks := func(v []string) bool {
 		lastEpoch := utils.StringToInt64(v[ColLastEpoch])

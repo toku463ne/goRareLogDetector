@@ -331,3 +331,10 @@ func StringToInt64(s string) int64 {
 	}
 	return i
 }
+
+func NextDivisibleByN(i, n int) int {
+	if i%n == 0 {
+		return i
+	}
+	return ((i / n) + 1) * 10000
+}

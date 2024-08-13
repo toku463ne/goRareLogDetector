@@ -61,7 +61,7 @@ func Test_Analyzer_Run(t *testing.T) {
 
 	a.Close()
 
-	time.Sleep(3000000000)
+	time.Sleep(1000000000)
 
 	// New log added
 	if _, err := utils.CopyFile("../../test/data/rarelogdetector/analyzer/sample.log",
@@ -99,7 +99,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	time.Sleep(3000000000)
+	time.Sleep(1000000000)
 
 	// New log added
 	if _, err := utils.CopyFile("../../test/data/rarelogdetector/analyzer/sample_new.log",
@@ -114,21 +114,21 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	results, err := a.Detect(3)
+	results, err := a.Detect()
 	if err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
-	if err := utils.GetGotExpErr("results length", len(results), 3); err != nil {
+	if err := utils.GetGotExpErr("results length", len(results), 4); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
-	if err := utils.GetGotExpErr("results[1].count", results[1].count, 18); err != nil {
+	if err := utils.GetGotExpErr("results[1].count", results[2].count, 18); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
-	if err := utils.GetGotExpErr("results[2].count", results[2].count, 1); err != nil {
+	if err := utils.GetGotExpErr("results[2].count", results[3].count, 1); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -186,4 +186,39 @@ func Test_Analyzer_TopN(t *testing.T) {
 		t.Error()
 		return
 	}
+}
+
+func Test_Analyzer_YearDay(t *testing.T) {
+	testDir, err := utils.InitTestDir("Test_Analyzer_Run")
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	logPath := "../../test/data/rarelogdetector/analyzer/yeardays.log"
+	logFormat := `^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<message>.+)$`
+	layout := "Jan 2 15:04:05"
+	dataDir := testDir + "/data"
+
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, "", "", 2, 3, 5, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if err := utils.GetGotExpErr("before feed", a.maxBlocks, 2); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if err := a.Feed(0); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if err := utils.GetGotExpErr("after feed", a.maxBlocks, 10); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
 }

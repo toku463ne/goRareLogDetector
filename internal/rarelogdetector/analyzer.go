@@ -5,6 +5,7 @@ import (
 	"goRareLogDetector/pkg/csvdb"
 	"goRareLogDetector/pkg/filepointer"
 	"goRareLogDetector/pkg/utils"
+	"math"
 	"regexp"
 
 	"github.com/sirupsen/logrus"
@@ -72,9 +73,7 @@ func NewAnalyzer2(dataDir string, readOnly bool) (*analyzer, error) {
 
 func (a *analyzer) open() error {
 	if a.dataDir == "" {
-		if err := a.initBlocks(); err != nil {
-			return err
-		}
+		a.initBlocks()
 		if err := a.init(); err != nil {
 			return err
 		}
@@ -90,9 +89,7 @@ func (a *analyzer) open() error {
 				return err
 			}
 		} else {
-			if err := a.initBlocks(); err != nil {
-				return err
-			}
+			a.initBlocks()
 			if err := a.init(); err != nil {
 				return err
 			}
@@ -110,6 +107,7 @@ func (a *analyzer) open() error {
 	return nil
 }
 
+/*
 func (a *analyzer) initBlocks() error {
 	if a.maxBlocks == 0 && a.blockSize == 0 {
 		cnt, fileCnt, err := a.fp.CountNFiles(cNFilesToCheckCount, a.logPath)
@@ -127,6 +125,26 @@ func (a *analyzer) calcBlocks(totalCount int, nFiles int) {
 	}
 	m := float64(totalCount) / float64(nFiles)
 	a.maxBlocks = int(cLogCycle * (float64(m) / float64(a.blockSize)))
+}
+*/
+
+func (a *analyzer) initBlocks() {
+	if a.blockSize == 0 {
+		a.blockSize = 10000
+	}
+	if a.maxBlocks == 0 {
+		a.maxBlocks = 100
+	}
+	if a.trans == nil || a.trans.maxCountByDay == 0 {
+		return
+	}
+	n := int(math.Ceil(float64(a.trans.maxCountByDay) / float64(a.blockSize)))
+	m := n * a.daysToKeep
+	if m > a.maxBlocks {
+		a.maxBlocks = utils.NextDivisibleByN(m, a.maxBlocks)
+		logrus.Debugf("maxBlocks changed to %d", a.maxBlocks)
+	}
+
 }
 
 func (a *analyzer) init() error {
@@ -309,25 +327,30 @@ func (a *analyzer) initFilePointer() error {
 
 func (a *analyzer) Feed(targetLinesCnt int) error {
 	logrus.Infof("Counting terms")
-	if _, err := a._run(targetLinesCnt, true, 0); err != nil {
+	if _, err := a._run(targetLinesCnt, true, false); err != nil {
 		return err
 	}
+
+	a.initBlocks()
+
 	logrus.Infof("Analyzing log")
-	if _, err := a._run(targetLinesCnt, false, 0); err != nil {
+	if _, err := a._run(targetLinesCnt, false, false); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (a *analyzer) Detect(nLastLinesToDetect int) ([]phraseCnt, error) {
+func (a *analyzer) Detect() ([]phraseCnt, error) {
 	logrus.Debug("Starting term registration")
-	if _, err := a._run(0, true, 0); err != nil {
+	if _, err := a._run(0, true, false); err != nil {
 		return nil, err
 	}
 	logrus.Debug("Completed term registration")
 
+	a.initBlocks()
+
 	logrus.Debug("Starting log analyzing")
-	results, err := a._run(0, false, nLastLinesToDetect)
+	results, err := a._run(0, false, true)
 	if err != nil {
 		return nil, err
 	}
@@ -335,8 +358,8 @@ func (a *analyzer) Detect(nLastLinesToDetect int) ([]phraseCnt, error) {
 	return results, nil
 }
 
-func (a *analyzer) DetectAndShow(nLastLinesToDetect int) error {
-	results, err := a.Detect(nLastLinesToDetect)
+func (a *analyzer) DetectAndShow() error {
+	results, err := a.Detect()
 	if err != nil {
 		return err
 	}
@@ -370,17 +393,9 @@ func (a *analyzer) TopNShow(N, minCnt, days int) error {
 	return nil
 }
 
-func (a *analyzer) _run(targetLinesCnt int, registerPreTerms bool, nLastLinesToDetect int) ([]phraseCnt, error) {
+func (a *analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bool) ([]phraseCnt, error) {
 	var results []phraseCnt
 	linesProcessed := 0
-	minLineToDetect := -1
-
-	if nLastLinesToDetect > 0 {
-		minLineToDetect = a.trans.totalLines - nLastLinesToDetect
-		if minLineToDetect < 0 {
-			minLineToDetect = 1
-		}
-	}
 
 	if err := a.initFilePointer(); err != nil {
 		return nil, err
@@ -409,7 +424,7 @@ func (a *analyzer) _run(targetLinesCnt int, registerPreTerms bool, nLastLinesToD
 		}
 		linesProcessed++
 
-		if minLineToDetect >= 1 && linesProcessed > minLineToDetect {
+		if detectMode {
 			p := new(phraseCnt)
 			p.count = cnt
 			p.line = te

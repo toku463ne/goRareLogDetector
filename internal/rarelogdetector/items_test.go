@@ -507,7 +507,7 @@ func Test_ItemsWithDays(t *testing.T) {
 		return
 	}
 	// block 1 must be removed because of expiration
-	if err := utils.GetGotExpErr("block 1 exists", blockExists(it, 0), false); err != nil {
+	if err := utils.GetGotExpErr("block 1 exists", blockExists(it, 1), false); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
