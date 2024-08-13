@@ -28,17 +28,21 @@ type trans struct {
 	totalLines        int
 	minLineToDetect   int
 	latestUpdate      int64
+	filterRe          *regexp.Regexp
+	xFilterRe         *regexp.Regexp
 }
 
 type phraseScore struct {
 	phraseID int
-	count    int
-	score    float64
-	text     string
+	Count    int
+	Score    float64
+	Text     string
 }
 
 func newTrans(dataDir, logFormat, timestampLayout string,
-	maxBlocks, blockSize, daysToKeep int, useGzip, readOnly bool) (*trans, error) {
+	maxBlocks, blockSize, daysToKeep int,
+	filterRe, xFilterRe *regexp.Regexp,
+	useGzip, readOnly bool) (*trans, error) {
 	t := new(trans)
 	te, err := newItems(dataDir, "terms", maxBlocks, daysToKeep, useGzip)
 	if err != nil {
@@ -65,6 +69,8 @@ func newTrans(dataDir, logFormat, timestampLayout string,
 	t.totalLines = 0
 	t.minLineToDetect = 0
 	t.phraseScores = make(map[int]float64, 10000)
+	t.filterRe = filterRe
+	t.xFilterRe = xFilterRe
 
 	//t.maxDays = maxDays
 
@@ -103,6 +109,11 @@ func (t *trans) load() error {
 	if err := t.phrases.load(); err != nil {
 		return err
 	}
+	if err := t.calcPhraseScore(); err != nil {
+		return err
+	}
+
+	t.latestUpdate = t.phrases.lastUpdate
 
 	// merge to t.preTerms
 	t.preTerms = t.terms.DeepCopy()
@@ -149,7 +160,19 @@ func (t *trans) calcStats() {
 	t.scoreStd = std
 }
 
-func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string, registerItem bool) int {
+func (t *trans) calcPhraseScore() error {
+	for _, line := range t.phrases.memberMap {
+		if tokens, err := t.toTermList(line, 0, false, false); err == nil {
+			t.registerPhrase(tokens, 0, "", false, 1.0)
+		} else {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
+	registerItem bool, matchRate float64) int {
 	var te *items
 	if t.preTermRegistered {
 		te = t.preTerms
@@ -168,13 +191,17 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 	}
 
 	n := len(tokens)
-	if n <= 3 {
+	if n <= 3 || matchRate == 1.0 {
 		phrase = tokens
 	} else {
 		rate := 0.0
-		for _, tmr := range tranMatchRates {
-			if n >= tmr.matchLen {
-				rate = tmr.matchRate
+		if matchRate > 0 {
+			rate = matchRate
+		} else {
+			for _, tmr := range tranMatchRates {
+				if n >= tmr.matchLen {
+					rate = tmr.matchRate
+				}
 			}
 		}
 		minLen := int(float64(n) * rate)
@@ -278,6 +305,7 @@ func (t *trans) toTermList(line string, lastUpdate int64, registerItem, register
 func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registerPreTerms bool) (int, error) {
 	var lastdt time.Time
 	var err error
+	orgLine := line
 	phraseCnt := -1
 	//yearDay := 0
 	lastUpdate := fileEpoch
@@ -305,7 +333,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 	if registerPreTerms {
 		t.totalLines++
 	} else {
-		phraseID := t.registerPhrase(tokens, lastUpdate, line, registerItem)
+		phraseID := t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, 0)
 		if t.phrases.DataDir != "" && !t.readOnly && t.phrases.currItemCount >= t.blockSize {
 			if err := t.next(); err != nil {
 				return -1, err
@@ -335,12 +363,22 @@ func (t *trans) next() error {
 
 func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64) []phraseScore {
 	phraseScores := t.phraseScores
+	filterRe := t.filterRe
+	xFilterRe := t.xFilterRe
 
 	var scores []phraseScore
 	for phraseID, score := range phraseScores {
+		text := t.phrases.getLastValue(phraseID)
+		b := []byte(text)
+		if filterRe != nil && !filterRe.Match(b) {
+			continue
+		}
+		if xFilterRe != nil && xFilterRe.Match(b) {
+			continue
+		}
+
 		cnt := t.phrases.getCount(phraseID)
 		lastUpdate := t.phrases.getLastUpdate(phraseID)
-		text := t.phrases.getLastValue(phraseID)
 		if cnt <= minCnt && (maxLastUpdate == 0 || lastUpdate >= maxLastUpdate) {
 			scores = append(scores, phraseScore{phraseID, cnt, score, text})
 		}
@@ -348,7 +386,7 @@ func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64) []phraseScore 
 
 	// Sort the slice by score in descending order
 	sort.Slice(scores, func(i, j int) bool {
-		return scores[i].score > scores[j].score
+		return scores[i].Score > scores[j].Score
 	})
 
 	// Get the top N key-score pairs

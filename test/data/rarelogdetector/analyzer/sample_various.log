@@ -1,0 +1,15 @@
+Aug 01 10:24:20 [10000][INFO] Zabbix server service started PID=10000
+Aug 01 10:25:20 [10001][INFO] Zabbix agent service started PID=10001
+Aug 01 10:26:20 [10002][INFO] PostgreSQL service started PID=10002
+Aug 01 10:28:20 [10003][ERROR] Failed to start MariaDB server service PID=10003
+Aug 01 10:29:20 [10004][INFO] Zabbix server service started PID=10004
+Aug 01 10:30:20 [10005][ERROR] Failed to start MariaDB server service PID=10005
+Aug 01 10:31:20 [10002][ERROR] Deadlock detected PID=10002
+Aug 01 10:32:20 [10100][ERROR] This is an error that always occurs PID=10100
+Aug 01 10:32:20 [10007][ERROR] Failed to start MariaDB server service PID=10007
+Aug 01 10:33:20 [10008][ERROR] Failed to start MariaDB server service PID=10008
+Aug 01 10:34:20 [10009][ERROR] Failed to start MariaDB server service PID=10009
+Aug 01 10:35:20 [10010][ERROR] Failed to start MariaDB server service PID=10010
+Aug 01 10:35:20 [10012][ERROR] Detected an abnormal access from client 1.2.3.4 PID=10012
+Aug 01 10:36:20 [10011][ERROR] Failed to start MariaDB server service PID=10011
+

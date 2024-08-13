@@ -17,6 +17,7 @@ type items struct {
 	memberMap     map[int]string
 	counts        map[int]int
 	lastUpdates   map[int]int64
+	lastUpdate    int64
 	lastValues    map[int]string
 	currCounts    map[int]int
 	currItemCount int
@@ -71,6 +72,11 @@ func (i *items) register(item string, addCount int, lastUpdate int64, lastValue 
 			i.currItemCount++
 		}
 	}
+
+	if lastUpdate > i.lastUpdate {
+		i.lastUpdate = lastUpdate
+	}
+
 	if addCount == 0 {
 		return itemID
 	}

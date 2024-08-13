@@ -12,7 +12,7 @@ func Test_tokenizeLine(t *testing.T) {
 	// openvpn log
 	pattern := `^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<host_ip>\d+\.\w+\.\w+\.\d+) openvpn\[\d+\]: (?P<source_ip>\d+\.\w+\.\w+\.\d+):\d+ (?P<message>.+)$`
 	dateFormat := "Jan 2 15:04:05"
-	tr, err := newTrans("", pattern, dateFormat, 0, 1000, 0, false, false)
+	tr, err := newTrans("", pattern, dateFormat, 0, 1000, 0, nil, nil, false, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -52,7 +52,7 @@ func Test_tokenizeLine(t *testing.T) {
 	// nginx log
 	pattern = `^(?P<timestamp>.+)\+09\:00 from:"(.*)" user:"(.*)" via:"(.*)" to:"(.*):\d+" (?P<message>.+)$`
 	dateFormat = "2006-01-02T15:04:05"
-	tr, err = newTrans("", pattern, dateFormat, 0, 1000, 0, false, false)
+	tr, err = newTrans("", pattern, dateFormat, 0, 1000, 0, nil, nil, false, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -89,7 +89,7 @@ func Test_tokenizeLine(t *testing.T) {
 	}
 
 	// other
-	tr, err = newTrans("", "", "", 0, 1000, 0, false, false)
+	tr, err = newTrans("", "", "", 0, 1000, 0, nil, nil, false, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return

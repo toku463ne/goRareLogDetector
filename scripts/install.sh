@@ -34,6 +34,7 @@ install_go_libraries() {
     go get "github.com/pkg/errors"
     go get "github.com/go-ini/ini"
     go get "goRareLogDetector/pkg/csvdb"
+    go get gopkg.in/yaml.v2
 }
 
 # Check if Go is already installed
@@ -53,8 +54,8 @@ install_go_libraries
 echo go clean -cache -modcache -i -r
 go clean -cache -modcache -i -r
 
-echo go build -o rarelog cmd/logdetector/main.go
-go build -o rarelog cmd/logdetector/main.go
+echo go build -o rarelog cmd/rarelog/main.go
+go build -o rarelog cmd/rarelog/main.go
 
 chmod +x rarelog
 

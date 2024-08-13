@@ -60,6 +60,16 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	return a, nil
 }
 
+func NewAnalyzer2(dataDir string, readOnly bool) (*analyzer, error) {
+	a := new(analyzer)
+	a.dataDir = dataDir
+	a.readOnly = readOnly
+	if err := a.open(); err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
 func (a *analyzer) open() error {
 	if a.dataDir == "" {
 		if err := a.initBlocks(); err != nil {
@@ -127,7 +137,9 @@ func (a *analyzer) init() error {
 	}
 
 	trans, err := newTrans(a.dataDir, a.logFormat, a.timestampLayout,
-		a.maxBlocks, a.blockSize, a.daysToKeep, true, a.readOnly)
+		a.maxBlocks, a.blockSize, a.daysToKeep,
+		a.filterRe, a.xFilterRe,
+		true, a.readOnly)
 	if err != nil {
 		return err
 	}
@@ -353,7 +365,7 @@ func (a *analyzer) TopNShow(N, minCnt, days int) error {
 	}
 
 	for _, res := range phraseScores {
-		fmt.Printf("%d,%f,%s\n", res.count, res.score, res.text)
+		fmt.Printf("%d,%f,%s\n", res.Count, res.Score, res.Text)
 	}
 	return nil
 }

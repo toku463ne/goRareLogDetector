@@ -53,7 +53,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 	lastValue := a.trans.phrases.getLastValue(phraseID)
-	explected := "Comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006 uniq020"
+	explected := "Jul 31 20:24:20 Comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006 uniq020"
 	if err := utils.GetGotExpErr("last value", lastValue, explected); err != nil {
 		t.Errorf("%v", err)
 		return
@@ -78,7 +78,7 @@ func Test_Analyzer_Run(t *testing.T) {
 
 	phraseID = a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006")
 	lastValue = a.trans.phrases.getLastValue(phraseID)
-	explected = "Comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006 uniq020"
+	explected = "Jul 31 20:24:20 Comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006 uniq020"
 	if err := utils.GetGotExpErr("last value", lastValue, explected); err != nil {
 		t.Errorf("%v", err)
 		return
@@ -177,12 +177,12 @@ func Test_Analyzer_TopN(t *testing.T) {
 		return
 	}
 
-	if err := utils.GetGotExpErr("res[0].count", res[0].count, 1); err != nil {
+	if err := utils.GetGotExpErr("res[0].count", res[0].Count, 1); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
-	if res[0].score < res[1].score {
+	if res[0].Score < res[1].Score {
 		t.Error()
 		return
 	}
