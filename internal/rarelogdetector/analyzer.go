@@ -142,6 +142,7 @@ func (a *analyzer) initBlocks() {
 	m := n * a.daysToKeep
 	if m > a.maxBlocks {
 		a.maxBlocks = utils.NextDivisibleByN(m, a.maxBlocks)
+		a.trans.SetMaxBlocks(a.maxBlocks)
 		logrus.Debugf("maxBlocks changed to %d", a.maxBlocks)
 	}
 

@@ -221,4 +221,10 @@ func Test_Analyzer_YearDay(t *testing.T) {
 		return
 	}
 
+	blockCount := a.trans.phrases.CountFromStatusTable(nil)
+	if err := utils.GetGotExpErr("after feed: block count", blockCount, 6); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
 }

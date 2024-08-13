@@ -82,6 +82,15 @@ func newTrans(dataDir, logFormat, timestampLayout string,
 	return t, nil
 }
 
+func (t *trans) SetMaxBlocks(maxBlocks int) {
+	if t.terms != nil {
+		t.terms.SetMaxBlocks(maxBlocks)
+	}
+	if t.phrases != nil {
+		t.phrases.SetMaxBlocks(maxBlocks)
+	}
+}
+
 func (t *trans) parseLogFormat(logFormat string) {
 	re := regexp.MustCompile(logFormat)
 	names := re.SubexpNames()
