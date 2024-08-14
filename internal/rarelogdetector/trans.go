@@ -457,6 +457,16 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 		yearDay = lastdt.Year()*1000 + lastdt.YearDay()
 	}
 
+	if !registerPreTerms {
+		if t.phrases.DataDir != "" && !t.readOnly && t.blockSize > 0 {
+			if t.phrases.currItemCount >= t.blockSize || yearDay > t.currYearDay {
+				if err := t.next(); err != nil {
+					return -1, err
+				}
+			}
+		}
+	}
+
 	t.lastMessage = line
 
 	tokens, err := t.toTermList(line, lastUpdate, registerItem, registerPreTerms)
@@ -470,15 +480,10 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 		t.totalLines++
 	} else {
 		phraseID := t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, 0)
-		if t.phrases.DataDir != "" && !t.readOnly && t.blockSize > 0 && (t.phrases.currItemCount >= t.blockSize || yearDay > t.currYearDay) {
-			if err := t.next(); err != nil {
-				return -1, err
-			}
-		}
 		phraseCnt = t.phrases.getCount(phraseID)
 	}
 
-	if yearDay > t.currYearDay {
+	if t.currYearDay > 0 && yearDay > t.currYearDay {
 		if t.countByDay > t.maxCountByDay {
 			t.maxCountByDay = t.countByDay
 		}
