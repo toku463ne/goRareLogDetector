@@ -41,7 +41,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		}
 	}
 
-	if err := utils.GetGotExpErr("total count of phrases #1", len(a.trans.phrases.members), 3); err != nil {
+	if err := utils.GetGotExpErr("total count of phrases #1", len(a.trans.phrases.members), 6); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -94,7 +94,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		}
 	}
 
-	if err := utils.GetGotExpErr("total count of phrases #2", len(a.trans.phrases.members), 3); err != nil {
+	if err := utils.GetGotExpErr("total count of phrases #2", len(a.trans.phrases.members), 8); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -124,7 +124,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		t.Errorf("%v", err)
 		return
 	}
-	if err := utils.GetGotExpErr("results[1].count", results[2].count, 18); err != nil {
+	if err := utils.GetGotExpErr("results[1].count", results[1].count, 4); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -164,7 +164,6 @@ func Test_Analyzer_TopN(t *testing.T) {
 		t.Errorf("%v", err)
 		return
 	}
-	time.Sleep(1000000000)
 
 	res, err := a.TopN(3, 1, 100)
 	if err != nil {
@@ -200,13 +199,13 @@ func Test_Analyzer_YearDay(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, "", "", 2, 3, 5, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, "", "", 0, 0, 5, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
-	if err := utils.GetGotExpErr("before feed", a.maxBlocks, 2); err != nil {
+	if err := utils.GetGotExpErr("before feed", a.maxBlocks, 0); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -216,13 +215,13 @@ func Test_Analyzer_YearDay(t *testing.T) {
 		return
 	}
 
-	if err := utils.GetGotExpErr("after feed", a.maxBlocks, 10); err != nil {
+	if err := utils.GetGotExpErr("after feed", a.maxBlocks, 5); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
 	blockCount := a.trans.phrases.CountFromStatusTable(nil)
-	if err := utils.GetGotExpErr("after feed: block count", blockCount, 6); err != nil {
+	if err := utils.GetGotExpErr("after feed: block count", blockCount, 5); err != nil {
 		t.Errorf("%v", err)
 		return
 	}

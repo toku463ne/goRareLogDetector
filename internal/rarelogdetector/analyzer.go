@@ -129,22 +129,42 @@ func (a *analyzer) calcBlocks(totalCount int, nFiles int) {
 */
 
 func (a *analyzer) initBlocks() {
-	if a.blockSize == 0 {
-		a.blockSize = 10000
+	if a.maxBlocks > 0 && a.blockSize > 0 {
+		if a.trans != nil {
+			a.trans.setBlockSize(a.blockSize)
+			a.trans.setMaxBlocks(a.maxBlocks)
+		}
+		return
 	}
-	if a.maxBlocks == 0 {
-		a.maxBlocks = 100
-	}
+
 	if a.trans == nil || a.trans.maxCountByDay == 0 {
 		return
 	}
-	n := int(math.Ceil(float64(a.trans.maxCountByDay) / float64(a.blockSize)))
-	m := n * a.daysToKeep
-	if m > a.maxBlocks {
-		a.maxBlocks = utils.NextDivisibleByN(m, a.maxBlocks)
-		a.trans.SetMaxBlocks(a.maxBlocks)
-		logrus.Debugf("maxBlocks changed to %d", a.maxBlocks)
+
+	maxCountByDay := a.trans.maxCountByDay
+	daysToKeep := a.daysToKeep
+	if daysToKeep == 0 {
+		daysToKeep = 30
 	}
+
+	if a.blockSize == 0 {
+		if maxCountByDay < 3000 {
+			a.blockSize = 10000
+		} else if maxCountByDay < 30000 {
+			a.blockSize = 100000
+		} else if maxCountByDay < 300000 {
+			a.blockSize = 100000
+		} else {
+			a.blockSize = 1000000
+		}
+	}
+
+	if a.maxBlocks == 0 {
+		n := int(math.Ceil(float64(a.trans.maxCountByDay) / float64(a.blockSize)))
+		a.maxBlocks = n * a.daysToKeep
+	}
+	a.trans.setBlockSize(a.blockSize)
+	a.trans.setMaxBlocks(a.maxBlocks)
 
 }
 
@@ -338,6 +358,7 @@ func (a *analyzer) Feed(targetLinesCnt int) error {
 	if _, err := a._run(targetLinesCnt, false, false); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -355,6 +376,7 @@ func (a *analyzer) Detect() ([]phraseCnt, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	logrus.Debug("Completed log analyzing")
 	return results, nil
 }
@@ -445,9 +467,13 @@ func (a *analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bo
 	}
 	if registerPreTerms {
 		a.trans.preTermRegistered = true
-		a.trans.calcStats()
+		//a.trans.calcStats()
+		a.trans.calcCountBorder()
+	} else {
+		a.trans.calcPhrasesScore()
 	}
 	a.linesProcessed = linesProcessed
 	a.fp.Close()
+
 	return results, nil
 }

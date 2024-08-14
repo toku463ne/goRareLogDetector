@@ -63,8 +63,8 @@ func init() {
 
 	logFormat = ""
 	timestampLayout = ""
-	maxBlocks = 100
-	blockSize = 10000
+	maxBlocks = 0
+	blockSize = 0
 	daysToKeep = 0
 
 	// Parse command line flags

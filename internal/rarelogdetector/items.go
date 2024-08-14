@@ -1,8 +1,8 @@
 package rarelogdetector
 
 import (
-	"container/heap"
 	"math"
+	"sort"
 
 	"goRareLogDetector/pkg/csvdb"
 
@@ -290,50 +290,32 @@ func (i *items) DeepCopy() *items {
 	return copyItems
 }
 
-// An Item represents an element in the priority queue
-type Item struct {
-	itemID     int
-	lastUpdate int64
-}
+func (i *items) getCountBorder(rate float64) int {
+	// Convert the map to a slice of key-value pairs
+	var sortedCounts []int
+	for _, v := range i.counts {
+		sortedCounts = append(sortedCounts, v)
+	}
 
-// A MinHeap is a priority queue for Items based on lastUpdate (min-heap)
-type MinHeap []Item
+	// Sort the slice by values in ascending order
+	sort.Slice(sortedCounts, func(i, j int) bool {
+		return sortedCounts[i] < sortedCounts[j]
+	})
 
-func (h MinHeap) Len() int           { return len(h) }
-func (h MinHeap) Less(i, j int) bool { return h[i].lastUpdate < h[j].lastUpdate }
-func (h MinHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+	totalCount := i.totalCount
 
-func (h *MinHeap) Push(x interface{}) {
-	*h = append(*h, x.(Item))
-}
+	// Find the deviation border for the given percentage
+	targetCount := int(float64(totalCount) * rate)
+	cumulativeCount := 0
+	countBorder := 0
 
-func (h *MinHeap) Pop() interface{} {
-	old := *h
-	n := len(old)
-	item := old[n-1]
-	*h = old[0 : n-1]
-	return item
-}
-
-// Method of items to get the last N itemIDs with count M
-func (i *items) getLastNItemsWithCountM(N int, M int) []int {
-	h := &MinHeap{}
-	heap.Init(h)
-
-	for itemID, count := range i.counts {
-		if count == M {
-			lastUpdate := i.lastUpdates[itemID]
-			heap.Push(h, Item{itemID: itemID, lastUpdate: lastUpdate})
-			if h.Len() > N {
-				heap.Pop(h)
-			}
+	for _, v := range sortedCounts {
+		cumulativeCount += v
+		countBorder = v
+		if cumulativeCount >= targetCount {
+			break
 		}
 	}
 
-	// Collect results from the heap
-	result := make([]int, h.Len())
-	for k := len(result) - 1; k >= 0; k-- {
-		result[k] = heap.Pop(h).(Item).itemID
-	}
-	return result
+	return countBorder
 }

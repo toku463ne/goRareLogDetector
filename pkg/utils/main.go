@@ -317,6 +317,23 @@ func SortIndexByValue(values []float64, isAsc bool) []int {
 	return indexes
 }
 
+func SortIndexByIntValue(values []int, isAsc bool) []int {
+	indexes := make([]int, len(values))
+	for i, _ := range values {
+		indexes[i] = i
+	}
+	if isAsc {
+		sort.Slice(indexes, func(i, j int) bool {
+			return values[i] < values[j]
+		})
+	} else {
+		sort.Slice(indexes, func(i, j int) bool {
+			return values[i] > values[j]
+		})
+	}
+	return indexes
+}
+
 func AddDaysToEpoch(epoch int64, days int) int64 {
 	epochTime := time.Unix(epoch, 0)
 	epochTime = epochTime.AddDate(0, 0, days)

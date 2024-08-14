@@ -84,6 +84,9 @@ func (cdb *CircuitDB) GetBlockTable(blockNo int) (*Table, error) {
 func (cdb *CircuitDB) SetMaxBlocks(maxBlocks int) {
 	cdb.maxBlocks = maxBlocks
 }
+func (cdb *CircuitDB) SetBlockSize(blockSize int) {
+	cdb.blockSize = blockSize
+}
 
 func (cdb *CircuitDB) LoadCircuitDBStatus() error {
 	if cdb.DataDir == "" {
