@@ -18,6 +18,6 @@ const (
 	cCountBorderRate     = 0.01
 	cErrorKeywords       = "failure|failed|error|down|crit"
 	cNFilesToCheckCount  = 5
-	cTermCountBorderRate = 0.1
+	cTermCountBorderRate = 0.05
 	cCountbyScoreLen     = 100
 )

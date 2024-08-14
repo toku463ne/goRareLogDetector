@@ -302,15 +302,15 @@ func (i *items) getCountBorder(rate float64) int {
 		return sortedCounts[i] < sortedCounts[j]
 	})
 
-	totalCount := i.totalCount
+	totalCount := len(i.counts)
 
 	// Find the deviation border for the given percentage
-	targetCount := int(float64(totalCount) * rate)
+	targetCount := int(math.Ceil(float64(totalCount) * rate))
 	cumulativeCount := 0
 	countBorder := 0
 
 	for _, v := range sortedCounts {
-		cumulativeCount += v
+		cumulativeCount++
 		countBorder = v
 		if cumulativeCount >= targetCount {
 			break
