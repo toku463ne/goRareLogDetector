@@ -3,7 +3,9 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"goRareLogDetector/internal/rarelogdetector"
+	"goRareLogDetector/pkg/utils"
 	"io/ioutil"
 	"os"
 	"regexp"
@@ -191,11 +193,17 @@ func loadConfig(path string) error {
 
 func run() error {
 	logrus.Info("Starting application")
+	var err error
+	var a *rarelogdetector.Analyzer
 
-	a, err := rarelogdetector.NewAnalyzer(dataDir, logPath, logFormat, timestampLayout,
-		searchString, excludeString,
-		maxBlocks, blockSize, daysToKeep,
-		readOnly)
+	if utils.PathExist(fmt.Sprintf("%s/config.tbl.ini", dataDir)) {
+		a, err = rarelogdetector.NewAnalyzer2(dataDir, searchString, excludeString, readOnly)
+	} else {
+		a, err = rarelogdetector.NewAnalyzer(dataDir, logPath, logFormat, timestampLayout,
+			searchString, excludeString,
+			maxBlocks, blockSize, daysToKeep,
+			readOnly)
+	}
 	if err != nil {
 		return err
 	}

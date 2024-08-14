@@ -11,7 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type analyzer struct {
+type Analyzer struct {
 	*csvdb.CsvDB
 	dataDir         string
 	logPath         string
@@ -41,8 +41,8 @@ type phraseCnt struct {
 func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	searchRegex, exludeRegex string,
 	maxBlocks, blockSize, daysToKeep int,
-	readOnly bool) (*analyzer, error) {
-	a := new(analyzer)
+	readOnly bool) (*Analyzer, error) {
+	a := new(Analyzer)
 	a.dataDir = dataDir
 	a.logPath = logPath
 	a.logFormat = logFormat
@@ -61,9 +61,13 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	return a, nil
 }
 
-func NewAnalyzer2(dataDir string, readOnly bool) (*analyzer, error) {
-	a := new(analyzer)
+func NewAnalyzer2(dataDir,
+	searchRegex, exludeRegex string,
+	readOnly bool) (*Analyzer, error) {
+	a := new(Analyzer)
 	a.dataDir = dataDir
+	a.filterRe = utils.GetRegex(searchRegex)
+	a.xFilterRe = utils.GetRegex(exludeRegex)
 	a.readOnly = readOnly
 	if err := a.open(); err != nil {
 		return nil, err
@@ -71,7 +75,7 @@ func NewAnalyzer2(dataDir string, readOnly bool) (*analyzer, error) {
 	return a, nil
 }
 
-func (a *analyzer) open() error {
+func (a *Analyzer) open() error {
 	if a.dataDir == "" {
 		a.initBlocks()
 		if err := a.init(); err != nil {
@@ -108,7 +112,7 @@ func (a *analyzer) open() error {
 }
 
 /*
-func (a *analyzer) initBlocks() error {
+func (a *Analyzer) initBlocks() error {
 	if a.maxBlocks == 0 && a.blockSize == 0 {
 		cnt, fileCnt, err := a.fp.CountNFiles(cNFilesToCheckCount, a.logPath)
 		if err != nil {
@@ -119,7 +123,7 @@ func (a *analyzer) initBlocks() error {
 	return nil
 }
 
-func (a *analyzer) calcBlocks(totalCount int, nFiles int) {
+func (a *Analyzer) calcBlocks(totalCount int, nFiles int) {
 	if nFiles == 0 {
 		nFiles = 1
 	}
@@ -128,7 +132,7 @@ func (a *analyzer) calcBlocks(totalCount int, nFiles int) {
 }
 */
 
-func (a *analyzer) initBlocks() {
+func (a *Analyzer) initBlocks() {
 	if a.maxBlocks > 0 && a.blockSize > 0 {
 		if a.trans != nil {
 			a.trans.setBlockSize(a.blockSize)
@@ -168,7 +172,7 @@ func (a *analyzer) initBlocks() {
 
 }
 
-func (a *analyzer) init() error {
+func (a *Analyzer) init() error {
 	if a.dataDir != "" && !a.readOnly {
 		if err := utils.EnsureDir(a.dataDir); err != nil {
 			return err
@@ -186,7 +190,7 @@ func (a *analyzer) init() error {
 	return nil
 }
 
-func (a *analyzer) loadStatus() error {
+func (a *Analyzer) loadStatus() error {
 	if a.dataDir != "" {
 		if err := a.prepareDB(); err != nil {
 			return err
@@ -207,8 +211,12 @@ func (a *analyzer) loadStatus() error {
 		return err
 	}
 
-	a.filterRe = utils.GetRegex(filterReStr)
-	a.xFilterRe = utils.GetRegex(xFilterReStr)
+	if a.filterRe == nil {
+		a.filterRe = utils.GetRegex(filterReStr)
+	}
+	if a.xFilterRe == nil {
+		a.xFilterRe = utils.GetRegex(xFilterReStr)
+	}
 
 	if a.lastFileEpoch == 0 {
 		if err := a.lastStatusTable.Select1Row(nil,
@@ -222,14 +230,14 @@ func (a *analyzer) loadStatus() error {
 	return nil
 }
 
-func (a *analyzer) load() error {
+func (a *Analyzer) load() error {
 	if err := a.trans.load(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (a *analyzer) prepareDB() error {
+func (a *Analyzer) prepareDB() error {
 	d, err := csvdb.NewCsvDB(a.dataDir)
 	if err != nil {
 		return err
@@ -251,7 +259,7 @@ func (a *analyzer) prepareDB() error {
 	return nil
 }
 
-func (a *analyzer) saveLastStatus() error {
+func (a *Analyzer) saveLastStatus() error {
 	if a.dataDir == "" || a.readOnly {
 		return nil
 	}
@@ -274,7 +282,7 @@ func (a *analyzer) saveLastStatus() error {
 	return err
 }
 
-func (a *analyzer) saveConfig() error {
+func (a *Analyzer) saveConfig() error {
 	if a.readOnly {
 		return nil
 	}
@@ -299,7 +307,7 @@ func (a *analyzer) saveConfig() error {
 	return nil
 }
 
-func (a *analyzer) commit(completed bool) error {
+func (a *Analyzer) commit(completed bool) error {
 	if a.readOnly {
 		return nil
 	}
@@ -319,7 +327,7 @@ func (a *analyzer) commit(completed bool) error {
 	return nil
 }
 
-func (a *analyzer) Close() {
+func (a *Analyzer) Close() {
 	if a == nil {
 		return
 	}
@@ -332,7 +340,7 @@ func (a *analyzer) Close() {
 	}
 }
 
-func (a *analyzer) initFilePointer() error {
+func (a *Analyzer) initFilePointer() error {
 	var err error
 	if a.fp == nil || !a.fp.IsOpen() {
 		a.fp, err = filepointer.NewFilePointer(a.logPath, a.lastFileEpoch, a.lastFileRow)
@@ -346,13 +354,14 @@ func (a *analyzer) initFilePointer() error {
 	return nil
 }
 
-func (a *analyzer) Feed(targetLinesCnt int) error {
+func (a *Analyzer) Feed(targetLinesCnt int) error {
 	logrus.Infof("Counting terms")
 	if _, err := a._run(targetLinesCnt, true, false); err != nil {
 		return err
 	}
 
 	a.initBlocks()
+	a.trans.currYearDay = 0
 
 	logrus.Infof("Analyzing log")
 	if _, err := a._run(targetLinesCnt, false, false); err != nil {
@@ -362,7 +371,7 @@ func (a *analyzer) Feed(targetLinesCnt int) error {
 	return nil
 }
 
-func (a *analyzer) Detect() ([]phraseCnt, error) {
+func (a *Analyzer) Detect() ([]phraseCnt, error) {
 	logrus.Debug("Starting term registration")
 	if _, err := a._run(0, true, false); err != nil {
 		return nil, err
@@ -370,6 +379,7 @@ func (a *analyzer) Detect() ([]phraseCnt, error) {
 	logrus.Debug("Completed term registration")
 
 	a.initBlocks()
+	a.trans.currYearDay = 0
 
 	logrus.Debug("Starting log analyzing")
 	results, err := a._run(0, false, true)
@@ -381,7 +391,7 @@ func (a *analyzer) Detect() ([]phraseCnt, error) {
 	return results, nil
 }
 
-func (a *analyzer) DetectAndShow() error {
+func (a *Analyzer) DetectAndShow() error {
 	results, err := a.Detect()
 	if err != nil {
 		return err
@@ -392,7 +402,7 @@ func (a *analyzer) DetectAndShow() error {
 	return nil
 }
 
-func (a *analyzer) TopN(N, minCnt, days int) ([]phraseScore, error) {
+func (a *Analyzer) TopN(N, minCnt, days int) ([]phraseScore, error) {
 	if err := a.Feed(0); err != nil {
 		return nil, err
 	}
@@ -402,7 +412,7 @@ func (a *analyzer) TopN(N, minCnt, days int) ([]phraseScore, error) {
 	return phraseScores, nil
 }
 
-func (a *analyzer) TopNShow(N, minCnt, days int) error {
+func (a *Analyzer) TopNShow(N, minCnt, days int) error {
 	var err error
 	var phraseScores []phraseScore
 	phraseScores, err = a.TopN(N, minCnt, days)
@@ -416,7 +426,7 @@ func (a *analyzer) TopNShow(N, minCnt, days int) error {
 	return nil
 }
 
-func (a *analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bool) ([]phraseCnt, error) {
+func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bool) ([]phraseCnt, error) {
 	var results []phraseCnt
 	linesProcessed := 0
 

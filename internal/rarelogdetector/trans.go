@@ -444,6 +444,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 		if len(match) > 0 {
 			if t.timestampPos >= 0 && t.timestampLayout != "" && len(match) > t.timestampPos {
 				lastdt, err = utils.Str2date(t.timestampLayout, match[t.timestampPos])
+				yearDay = lastdt.Year()*1000 + lastdt.YearDay()
 			}
 			if err == nil {
 				lastUpdate = lastdt.Unix()
@@ -454,12 +455,11 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 				}
 			}
 		}
-		yearDay = lastdt.Year()*1000 + lastdt.YearDay()
 	}
 
 	if !registerPreTerms {
 		if t.phrases.DataDir != "" && !t.readOnly && t.blockSize > 0 {
-			if t.phrases.currItemCount >= t.blockSize || yearDay > t.currYearDay {
+			if t.phrases.currItemCount >= t.blockSize || (t.currYearDay > 0 && yearDay > t.currYearDay) {
 				if err := t.next(); err != nil {
 					return -1, err
 				}
@@ -483,11 +483,13 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 		phraseCnt = t.phrases.getCount(phraseID)
 	}
 
-	if t.currYearDay > 0 && yearDay > t.currYearDay {
-		if t.countByDay > t.maxCountByDay {
-			t.maxCountByDay = t.countByDay
+	if registerPreTerms {
+		if t.currYearDay > 0 && yearDay > t.currYearDay {
+			if t.countByDay > t.maxCountByDay {
+				t.maxCountByDay = t.countByDay
+			}
+			t.countByDay = 0
 		}
-		t.countByDay = 0
 	}
 	t.currYearDay = yearDay
 

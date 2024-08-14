@@ -26,7 +26,7 @@ func Test_main_config(t *testing.T) {
 	main()
 
 	dataDir := fmt.Sprintf("%s/data", rootDir)
-	a, err := rarelogdetector.NewAnalyzer2(dataDir, true)
+	a, err := rarelogdetector.NewAnalyzer2(dataDir, "", "", true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -55,5 +55,10 @@ func Test_main_config(t *testing.T) {
 func Test_real(t *testing.T) {
 	conf := "/home/ubuntu/logandata/openvpn.yml"
 	os.Args = []string{"rarelog", "-m", "feed", "-c", conf}
+	main()
+}
+
+func Test_real2(t *testing.T) {
+	os.Args = []string{"rarelog", "-d", "/home/ubuntu/logandata/openvpn_data", "-x", "username attempted to change from"}
 	main()
 }
