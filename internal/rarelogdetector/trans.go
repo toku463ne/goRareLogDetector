@@ -25,8 +25,8 @@ type trans struct {
 	totalLines        int
 	minLineToDetect   int
 	latestUpdate      int64
-	filterRe          *regexp.Regexp
-	xFilterRe         *regexp.Regexp
+	filterRe          []*regexp.Regexp
+	xFilterRe         []*regexp.Regexp
 	currYearDay       int
 	countByDay        int
 	maxCountByDay     int
@@ -42,7 +42,7 @@ type phraseScore struct {
 
 func newTrans(dataDir, logFormat, timestampLayout string,
 	maxBlocks, blockSize, daysToKeep int,
-	filterRe, xFilterRe *regexp.Regexp,
+	filterRe, xFilterRe []*regexp.Regexp,
 	useGzip, readOnly bool) (*trans, error) {
 	t := new(trans)
 	te, err := newItems(dataDir, "terms", maxBlocks, daysToKeep, useGzip)
@@ -435,6 +435,7 @@ func (t *trans) toTermList(line string, lastUpdate int64, registerItem, register
 func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registerPreTerms bool) (int, error) {
 	var lastdt time.Time
 	var err error
+
 	orgLine := line
 	phraseCnt := -1
 	yearDay := 0
@@ -510,19 +511,37 @@ func (t *trans) next() error {
 	return nil
 }
 
+func (t *trans) match(text string) bool {
+	b := []byte(text)
+	matched := true
+	for _, filterRe := range t.filterRe {
+		if !filterRe.Match(b) {
+			matched = false
+			break
+		}
+	}
+	if !matched {
+		return false
+	}
+
+	matched = false
+	for _, xFilterRe := range t.xFilterRe {
+		if xFilterRe.Match(b) {
+			matched = true
+			break
+		}
+	}
+	return !matched
+}
+
 func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64) []phraseScore {
 	phraseScores := t.phraseScores
-	filterRe := t.filterRe
-	xFilterRe := t.xFilterRe
 
 	var scores []phraseScore
 	for phraseID, score := range phraseScores {
 		text := t.phrases.getLastValue(phraseID)
-		b := []byte(text)
-		if filterRe != nil && !filterRe.Match(b) {
-			continue
-		}
-		if xFilterRe != nil && xFilterRe.Match(b) {
+
+		if !t.match(text) {
 			continue
 		}
 

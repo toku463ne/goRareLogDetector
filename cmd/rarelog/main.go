@@ -27,6 +27,8 @@ var (
 	logPath         string
 	searchString    string
 	excludeString   string
+	searchStrings   []string
+	excludeStrings  []string
 	mode            string
 	logFormat       string
 	timestampLayout string
@@ -39,13 +41,13 @@ var (
 )
 
 type config struct {
-	DataDir         string `yaml:"dataDir"`
-	LogPath         string `yaml:"logPath"`
-	SearchString    string `yaml:"searchString"`
-	ExcludeString   string `yaml:"excludeString"`
-	LogFormat       string `yaml:"logFormat"`
-	TimestampLayout string `yaml:"timestampLayout"`
-	DaysToKeep      int    `yaml:"daysToKeep"`
+	DataDir         string   `yaml:"dataDir"`
+	LogPath         string   `yaml:"logPath"`
+	SearchStrings   []string `yaml:"searchString"`
+	ExcludeStrings  []string `yaml:"excludeString"`
+	LogFormat       string   `yaml:"logFormat"`
+	TimestampLayout string   `yaml:"timestampLayout"`
+	DaysToKeep      int      `yaml:"daysToKeep"`
 }
 
 func init() {
@@ -173,11 +175,11 @@ func loadConfig(path string) error {
 	if logPath == "" {
 		logPath = c.LogPath
 	}
-	if searchString == "" {
-		searchString = c.SearchString
+	if searchStrings == nil {
+		searchStrings = c.SearchStrings
 	}
-	if excludeString == "" {
-		excludeString = c.ExcludeString
+	if excludeStrings == nil {
+		excludeStrings = c.ExcludeStrings
 	}
 	if logFormat == "" {
 		logFormat = c.LogFormat
@@ -196,11 +198,18 @@ func run() error {
 	var err error
 	var a *rarelogdetector.Analyzer
 
+	if len(searchStrings) == 0 && searchString != "" {
+		searchStrings = []string{searchString}
+	}
+	if len(excludeStrings) == 0 && excludeString != "" {
+		excludeStrings = []string{excludeString}
+	}
+
 	if utils.PathExist(fmt.Sprintf("%s/config.tbl.ini", dataDir)) {
-		a, err = rarelogdetector.NewAnalyzer2(dataDir, searchString, excludeString, readOnly)
+		a, err = rarelogdetector.NewAnalyzer2(dataDir, searchStrings, excludeStrings, readOnly)
 	} else {
 		a, err = rarelogdetector.NewAnalyzer(dataDir, logPath, logFormat, timestampLayout,
-			searchString, excludeString,
+			searchStrings, excludeStrings,
 			maxBlocks, blockSize, daysToKeep,
 			readOnly)
 	}

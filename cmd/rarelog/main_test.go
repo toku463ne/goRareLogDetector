@@ -26,7 +26,7 @@ func Test_main_config(t *testing.T) {
 	main()
 
 	dataDir := fmt.Sprintf("%s/data", rootDir)
-	a, err := rarelogdetector.NewAnalyzer2(dataDir, "", "", true)
+	a, err := rarelogdetector.NewAnalyzer2(dataDir, searchStrings, excludeStrings, true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return

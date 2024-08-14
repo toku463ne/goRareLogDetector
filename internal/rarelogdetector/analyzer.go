@@ -24,8 +24,8 @@ type Analyzer struct {
 	lastStatusTable *csvdb.Table
 	trans           *trans
 	fp              *filepointer.FilePointer
-	filterRe        *regexp.Regexp
-	xFilterRe       *regexp.Regexp
+	filterRe        []*regexp.Regexp
+	xFilterRe       []*regexp.Regexp
 	lastFileEpoch   int64
 	lastFileRow     int
 	rowID           int64
@@ -39,7 +39,7 @@ type phraseCnt struct {
 }
 
 func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
-	searchRegex, exludeRegex string,
+	searchRegex, exludeRegex []string,
 	maxBlocks, blockSize, daysToKeep int,
 	readOnly bool) (*Analyzer, error) {
 	a := new(Analyzer)
@@ -47,8 +47,9 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	a.logPath = logPath
 	a.logFormat = logFormat
 	a.timestampLayout = timestampLayout
-	a.filterRe = utils.GetRegex(searchRegex)
-	a.xFilterRe = utils.GetRegex(exludeRegex)
+
+	a.setFilters(searchRegex, exludeRegex)
+
 	a.blockSize = blockSize
 	a.maxBlocks = maxBlocks
 	a.daysToKeep = daysToKeep
@@ -61,18 +62,29 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	return a, nil
 }
 
-func NewAnalyzer2(dataDir,
-	searchRegex, exludeRegex string,
+func NewAnalyzer2(dataDir string,
+	searchRegex, exludeRegex []string,
 	readOnly bool) (*Analyzer, error) {
 	a := new(Analyzer)
 	a.dataDir = dataDir
-	a.filterRe = utils.GetRegex(searchRegex)
-	a.xFilterRe = utils.GetRegex(exludeRegex)
+	a.setFilters(searchRegex, exludeRegex)
 	a.readOnly = readOnly
 	if err := a.open(); err != nil {
 		return nil, err
 	}
 	return a, nil
+}
+
+func (a *Analyzer) setFilters(searchRegex, exludeRegex []string) {
+	a.filterRe = make([]*regexp.Regexp, 0)
+	for _, s := range searchRegex {
+		a.filterRe = append(a.filterRe, utils.GetRegex(s))
+	}
+
+	a.xFilterRe = make([]*regexp.Regexp, 0)
+	for _, s := range exludeRegex {
+		a.xFilterRe = append(a.xFilterRe, utils.GetRegex(s))
+	}
 }
 
 func (a *Analyzer) open() error {
@@ -196,8 +208,6 @@ func (a *Analyzer) loadStatus() error {
 			return err
 		}
 	}
-	filterReStr := ""
-	xFilterReStr := ""
 	/*
 		"config": {"logPath", "blockSize", "maxBlocks",
 			"logFormat", "filterRe", "xFilterRe"}
@@ -206,16 +216,8 @@ func (a *Analyzer) loadStatus() error {
 		tableDefs["config"],
 		&a.logPath,
 		&a.blockSize, &a.maxBlocks,
-		&a.logFormat,
-		&filterReStr, &xFilterReStr); err != nil {
+		&a.logFormat); err != nil {
 		return err
-	}
-
-	if a.filterRe == nil {
-		a.filterRe = utils.GetRegex(filterReStr)
-	}
-	if a.xFilterRe == nil {
-		a.xFilterRe = utils.GetRegex(xFilterReStr)
 	}
 
 	if a.lastFileEpoch == 0 {
@@ -286,8 +288,6 @@ func (a *Analyzer) saveConfig() error {
 	if a.readOnly {
 		return nil
 	}
-	filterReStr := utils.Re2str(a.filterRe)
-	xFilterReStr := utils.Re2str(a.xFilterRe)
 
 	/*
 		{"logPath", "logFormat",
@@ -299,8 +299,6 @@ func (a *Analyzer) saveConfig() error {
 		"blockSize": a.blockSize,
 		"maxBlocks": a.maxBlocks,
 		"logFormat": a.logFormat,
-		"filterRe":  filterReStr,
-		"xFilterRe": xFilterReStr,
 	}); err != nil {
 		return err
 	}
@@ -458,10 +456,12 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bo
 		linesProcessed++
 
 		if detectMode {
-			p := new(phraseCnt)
-			p.count = cnt
-			p.line = te
-			results = append(results, *p)
+			if a.trans.match(te) {
+				p := new(phraseCnt)
+				p.count = cnt
+				p.line = te
+				results = append(results, *p)
+			}
 		}
 
 		a.rowID++

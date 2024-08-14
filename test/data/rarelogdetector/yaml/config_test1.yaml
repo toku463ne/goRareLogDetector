@@ -1,8 +1,10 @@
 ---
 dataDir: "{{ HOME }}/rarelogs/Test_main_config/data"
 logPath: "../../test/data/rarelogdetector/analyzer/sample_various.log"
-searchString: ERROR
-excludeString: always
+searchString: 
+  - ERROR
+excludeString: 
+  - always
 logFormat: '^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) \[\d+\]\[\w+\] (?P<message>.+)$'
 timestampLayout: "Jan 2 15:04:05"
 daysToKeep: 7
