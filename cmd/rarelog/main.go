@@ -35,6 +35,7 @@ var (
 	maxBlocks       int
 	blockSize       int
 	daysToKeep      int
+	matchRate       float64
 	N               int
 	M               int
 	D               int
@@ -48,6 +49,7 @@ type config struct {
 	LogFormat       string   `yaml:"logFormat"`
 	TimestampLayout string   `yaml:"timestampLayout"`
 	DaysToKeep      int      `yaml:"daysToKeep"`
+	MatchRate       float64  `yaml:"matchRate"`
 }
 
 func init() {
@@ -55,12 +57,13 @@ func init() {
 	flag.StringVar(&configPath, "c", "", "Path to the configuration file")
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
 	flag.BoolVar(&silent, "silent", false, "Enable silent mode")
-	flag.BoolVar(&readOnly, "r", false, "Read only mode. Do not update data directory.")
+	flag.BoolVar(&readOnly, "readonly", false, "Read only mode. Do not update data directory.")
 	flag.StringVar(&dataDir, "d", "", "Path to the data directory")
 	flag.StringVar(&logPath, "f", "", "Log file")
 	flag.StringVar(&searchString, "s", "", "Search string")
 	flag.StringVar(&excludeString, "x", "", "Exclude string")
-	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed")
+	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed|termCounts")
+	flag.Float64Var(&matchRate, "r", 0.0, "It is considered 2 log lines 'match', if more than matchRate number of terms in a log line matches.")
 	flag.IntVar(&N, "N", 0, "Show Top N rare logs in topN mode")
 	flag.IntVar(&M, "M", 0, "Show ony logs appeared M times in topN mode")
 	flag.IntVar(&D, "D", 0, "Recent days to show in topN mode")
@@ -211,6 +214,7 @@ func run() error {
 		a, err = rarelogdetector.NewAnalyzer(dataDir, logPath, logFormat, timestampLayout,
 			searchStrings, excludeStrings,
 			maxBlocks, blockSize, daysToKeep,
+			matchRate,
 			readOnly)
 	}
 	if err != nil {
@@ -223,6 +227,8 @@ func run() error {
 		err = a.DetectAndShow()
 	case "topN":
 		err = a.TopNShow(N, M, D)
+	case "termCounts":
+		a.TermCountCountsShow(N)
 	default:
 		err = errors.New("-m: mode must be one of topN|detect|feed")
 	}

@@ -7,6 +7,7 @@ import (
 	"goRareLogDetector/pkg/utils"
 	"math"
 	"regexp"
+	"sort"
 
 	"github.com/sirupsen/logrus"
 )
@@ -31,6 +32,7 @@ type Analyzer struct {
 	rowID           int64
 	readOnly        bool
 	linesProcessed  int
+	matchRate       float64
 }
 
 type phraseCnt struct {
@@ -38,9 +40,15 @@ type phraseCnt struct {
 	line  string
 }
 
+type termCntCount struct {
+	termCount int
+	Count     int
+}
+
 func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	searchRegex, exludeRegex []string,
 	maxBlocks, blockSize, daysToKeep int,
+	matchRate float64,
 	readOnly bool) (*Analyzer, error) {
 	a := new(Analyzer)
 	a.dataDir = dataDir
@@ -53,6 +61,7 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	a.blockSize = blockSize
 	a.maxBlocks = maxBlocks
 	a.daysToKeep = daysToKeep
+	a.matchRate = matchRate
 	a.readOnly = readOnly
 
 	if err := a.open(); err != nil {
@@ -209,13 +218,13 @@ func (a *Analyzer) loadStatus() error {
 		}
 	}
 	/*
-		"config": {"logPath", "blockSize", "maxBlocks",
+		"config": {"logPath", "blockSize", "maxBlocks", "matchRate",
 			"logFormat", "filterRe", "xFilterRe"}
 	*/
 	if err := a.configTable.Select1Row(nil,
 		tableDefs["config"],
 		&a.logPath,
-		&a.blockSize, &a.maxBlocks,
+		&a.blockSize, &a.maxBlocks, &a.matchRate,
 		&a.logFormat); err != nil {
 		return err
 	}
@@ -298,6 +307,7 @@ func (a *Analyzer) saveConfig() error {
 		"logPath":   a.logPath,
 		"blockSize": a.blockSize,
 		"maxBlocks": a.maxBlocks,
+		"matchRate": a.matchRate,
 		"logFormat": a.logFormat,
 	}); err != nil {
 		return err
@@ -424,6 +434,44 @@ func (a *Analyzer) TopNShow(N, minCnt, days int) error {
 	return nil
 }
 
+func (a *Analyzer) termCountCounts() []termCntCount {
+	termCounts := a.trans.preTerms.counts
+
+	// Step 1: Count occurrences using a map
+	countMap := make(map[int]int)
+	for _, val := range termCounts {
+		countMap[val]++
+	}
+
+	t := make([]termCntCount, 0)
+	for k, v := range countMap {
+		t = append(t, termCntCount{k, v})
+	}
+
+	sort.Slice(t, func(i, j int) bool {
+		return t[i].termCount < t[j].termCount
+	})
+
+	return t
+}
+
+func (a *Analyzer) TermCountCountsShow(N int) error {
+	if _, err := a._run(0, true, false); err != nil {
+		return err
+	}
+	counts := a.termCountCounts()
+
+	n := 0
+	for _, c := range counts {
+		fmt.Printf("%d,%d\n", c.termCount, c.Count)
+		n++
+		if n >= N {
+			break
+		}
+	}
+	return nil
+}
+
 func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bool) ([]phraseCnt, error) {
 	var results []phraseCnt
 	linesProcessed := 0
@@ -443,7 +491,8 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bo
 			continue
 		}
 
-		cnt, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), true, registerPreTerms)
+		cnt, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), true,
+			registerPreTerms, a.matchRate)
 		if err != nil {
 			return nil, err
 		}

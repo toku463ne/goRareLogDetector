@@ -19,7 +19,7 @@ func Test_Analyzer_Run(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -70,7 +70,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, false)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -108,7 +108,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, true)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -146,7 +146,7 @@ func Test_Analyzer_TopN(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -199,7 +199,7 @@ func Test_Analyzer_YearDay(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 0, 0, 5, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 0, 0, 5, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return

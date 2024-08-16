@@ -432,7 +432,9 @@ func (t *trans) toTermList(line string, lastUpdate int64, registerItem, register
 	return tokens, nil
 }
 
-func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registerPreTerms bool) (int, error) {
+func (t *trans) tokenizeLine(line string, fileEpoch int64,
+	registerItem, registerPreTerms bool,
+	matchRate float64) (int, error) {
 	var lastdt time.Time
 	var err error
 
@@ -480,7 +482,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, registerItem, registe
 	if registerPreTerms {
 		t.totalLines++
 	} else {
-		phraseID := t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, 0)
+		phraseID := t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, matchRate)
 		phraseCnt = t.phrases.getCount(phraseID)
 	}
 
