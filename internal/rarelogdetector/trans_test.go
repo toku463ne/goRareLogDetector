@@ -8,6 +8,7 @@ import (
 func Test_tokenizeLine(t *testing.T) {
 	var err error
 	cnt := -1
+	cnt2 := -1
 
 	// openvpn log
 	pattern := `^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<host_ip>\d+\.\w+\.\w+\.\d+) openvpn\[\d+\]: (?P<source_ip>\d+\.\w+\.\w+\.\d+):\d+ (?P<message>.+)$`
@@ -19,12 +20,16 @@ func Test_tokenizeLine(t *testing.T) {
 	}
 
 	line := "Jul 31 20:24:33 192.168.67.51 openvpn[12781]: 125.30.90.192:1194 peer info: IV_LZ4=1"
-	if cnt, err = tr.tokenizeLine(line, 0, true, false, 0); err != nil {
+	if cnt, cnt2, err = tr.tokenizeLine(line, 0, true, false, 0); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
 	if err := utils.GetGotExpErr("item count", cnt, 1); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("item count", cnt2, 1); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -59,11 +64,15 @@ func Test_tokenizeLine(t *testing.T) {
 	}
 
 	line = `2024-08-01T21:51:08+09:00 from:"x.x.x.11" user:"-" via:"node01:8081" to:"x.x.x.41:81" r:"GET / HTTP/1.1" st:"401" srv:"qaapi.test.com"`
-	if cnt, err = tr.tokenizeLine(line, 0, true, false, 0); err != nil {
+	if cnt, cnt2, err = tr.tokenizeLine(line, 0, true, false, 0); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 	if err := utils.GetGotExpErr("item count", cnt, 1); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("item count", cnt2, 1); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -96,11 +105,15 @@ func Test_tokenizeLine(t *testing.T) {
 	}
 
 	line = "Jul 31 20:24:33 192.168.67.51 openvpn[12781]: 125.30.90.192:1194 peer info: IV_LZ4=1"
-	if cnt, err = tr.tokenizeLine(line, 0, true, false, 0); err != nil {
+	if cnt, cnt2, err = tr.tokenizeLine(line, 0, true, false, 0); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 	if err := utils.GetGotExpErr("item count", cnt, 1); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("item count", cnt2, 1); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -115,6 +128,7 @@ func Test_tokenizeLine(t *testing.T) {
 func Test_tokenizeLine_regex(t *testing.T) {
 	var err error
 	cnt := -1
+	cnt2 := -1
 
 	// openvpn log
 	pattern := `^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<host_ip>\d+\.\w+\.\w+\.\d+) openvpn\[\d+\]: .+:\d+ (?P<message>.+)$`
@@ -126,12 +140,16 @@ func Test_tokenizeLine_regex(t *testing.T) {
 	}
 
 	line := "Jul 31 20:24:33 192.168.67.51 openvpn[12781]: 125.30.90.192:1194 peer info: IV_LZ4=1"
-	if cnt, err = tr.tokenizeLine(line, 0, true, false, 0); err != nil {
+	if cnt, cnt2, err = tr.tokenizeLine(line, 0, true, false, 0); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
 	if err := utils.GetGotExpErr("item count", cnt, 1); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("item count", cnt2, 1); err != nil {
 		t.Errorf("%v", err)
 		return
 	}

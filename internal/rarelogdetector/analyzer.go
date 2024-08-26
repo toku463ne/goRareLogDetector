@@ -36,8 +36,9 @@ type Analyzer struct {
 }
 
 type phraseCnt struct {
-	count int
-	line  string
+	count        int
+	matchedCount int
+	line         string
 }
 
 type termCntCount struct {
@@ -491,7 +492,7 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bo
 			continue
 		}
 
-		cnt, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), true,
+		cnt, cnt2, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), true,
 			registerPreTerms, a.matchRate)
 		if err != nil {
 			return nil, err
@@ -507,7 +508,8 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bo
 		if detectMode {
 			if a.trans.match(te) {
 				p := new(phraseCnt)
-				p.count = cnt
+				p.count = cnt2
+				p.matchedCount = cnt
 				p.line = te
 				results = append(results, *p)
 			}
