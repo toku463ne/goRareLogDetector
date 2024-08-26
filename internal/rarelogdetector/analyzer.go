@@ -411,20 +411,20 @@ func (a *Analyzer) DetectAndShow() error {
 	return nil
 }
 
-func (a *Analyzer) TopN(N, minCnt, days int) ([]phraseScore, error) {
+func (a *Analyzer) TopN(N, minCnt, days int, ignoreMatchRate bool) ([]phraseScore, error) {
 	if err := a.Feed(0); err != nil {
 		return nil, err
 	}
 	maxLastUpdate := utils.AddDaysToEpoch(a.trans.latestUpdate, -N)
-	phraseScores := a.trans.getTopNScores(N, minCnt, maxLastUpdate)
+	phraseScores := a.trans.getTopNScores(N, minCnt, maxLastUpdate, ignoreMatchRate)
 
 	return phraseScores, nil
 }
 
-func (a *Analyzer) TopNShow(N, minCnt, days int) error {
+func (a *Analyzer) TopNShow(N, minCnt, days int, ignoreMatchRate bool) error {
 	var err error
 	var phraseScores []phraseScore
-	phraseScores, err = a.TopN(N, minCnt, days)
+	phraseScores, err = a.TopN(N, minCnt, days, ignoreMatchRate)
 	if err != nil {
 		return err
 	}

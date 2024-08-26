@@ -263,9 +263,12 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 	}
 
 	for i, count := range counts {
-		if count >= t.termCountBorder {
+		if count > t.termCountBorder {
 			phrase = append(phrase, tokens[i])
 		}
+	}
+	if len(phrase) <= 3 {
+		phrase = tokens
 	}
 
 	if n <= 3 || matchRate == 1.0 {
@@ -587,19 +590,25 @@ func (t *trans) match(text string) bool {
 	return !matched
 }
 
-func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64) []phraseScore {
+func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64, ignoreMatchRate bool) []phraseScore {
 	phraseScores := t.phraseScores
+	var p *items
+	if ignoreMatchRate {
+		p = t.phrases
+	} else {
+		p = t.matchedPhrases
+	}
 
 	var scores []phraseScore
 	for phraseID, score := range phraseScores {
-		text := t.matchedPhrases.getLastValue(phraseID)
+		text := p.getLastValue(phraseID)
 
 		if !t.match(text) {
 			continue
 		}
 
-		cnt := t.matchedPhrases.getCount(phraseID)
-		lastUpdate := t.matchedPhrases.getLastUpdate(phraseID)
+		cnt := p.getCount(phraseID)
+		lastUpdate := p.getLastUpdate(phraseID)
 		if cnt <= minCnt && (maxLastUpdate == 0 || lastUpdate >= maxLastUpdate) {
 			scores = append(scores, phraseScore{phraseID, cnt, score, text})
 		}

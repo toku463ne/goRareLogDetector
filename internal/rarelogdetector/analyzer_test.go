@@ -128,7 +128,15 @@ func Test_Analyzer_Run(t *testing.T) {
 		t.Errorf("%v", err)
 		return
 	}
+	if err := utils.GetGotExpErr("results[1].count", results[1].count, 4); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
 	if err := utils.GetGotExpErr("results[2].matchedCount", results[3].matchedCount, 1); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("results[2].count", results[3].count, 1); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -165,7 +173,7 @@ func Test_Analyzer_TopN(t *testing.T) {
 		return
 	}
 
-	res, err := a.TopN(3, 1, 100)
+	res, err := a.TopN(3, 1, 100, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
