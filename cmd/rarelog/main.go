@@ -40,6 +40,7 @@ var (
 	M               int
 	D               int
 	ignoreMatchRate bool
+	line            string
 )
 
 type config struct {
@@ -63,12 +64,13 @@ func init() {
 	flag.StringVar(&logPath, "f", "", "Log file")
 	flag.StringVar(&searchString, "s", "", "Search string")
 	flag.StringVar(&excludeString, "x", "", "Exclude string")
-	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed|termCounts")
+	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed|termCounts|analyzeLine")
 	flag.Float64Var(&matchRate, "r", 0.0, "It is considered 2 log lines 'match', if more than matchRate number of terms in a log line matches.")
 	flag.IntVar(&N, "N", 0, "Show Top N rare logs in topN mode")
 	flag.IntVar(&M, "M", 0, "Show ony logs appeared M times in topN mode")
 	flag.IntVar(&D, "D", 0, "Recent days to show in topN mode")
 	flag.BoolVar(&ignoreMatchRate, "ignoreMatchRate", false, "Compare to phrases which consist of frequent terms")
+	flag.StringVar(&line, "line", "", "Log line to analyze")
 
 	logFormat = ""
 	timestampLayout = ""
@@ -132,7 +134,7 @@ func main() {
 		logrus.WithError(err).Fatal("Application encountered an error")
 	}
 
-	logrus.Info("Application finished successfully")
+	logrus.Debug("Application finished successfully")
 }
 
 /*
@@ -199,7 +201,7 @@ func loadConfig(path string) error {
 }
 
 func run() error {
-	logrus.Info("Starting application")
+	logrus.Debug("Starting application")
 	var err error
 	var a *rarelogdetector.Analyzer
 
@@ -231,6 +233,8 @@ func run() error {
 		err = a.TopNShow(N, M, D, ignoreMatchRate)
 	case "termCounts":
 		a.TermCountCountsShow(N)
+	case "analyzeLine":
+		a.AnalyzeLine(line)
 	default:
 		err = errors.New("-m: mode must be one of topN|detect|feed")
 	}

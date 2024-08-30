@@ -492,7 +492,7 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bo
 			continue
 		}
 
-		cnt, cnt2, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), true,
+		cnt, cnt2, _, _, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), true,
 			registerPreTerms, a.matchRate)
 		if err != nil {
 			return nil, err
@@ -537,4 +537,11 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bo
 	a.fp.Close()
 
 	return results, nil
+}
+
+func (a *Analyzer) AnalyzeLine(line string) error {
+	if a.dataDir == "" || !utils.PathExist(a.dataDir) {
+		return fmt.Errorf("datadir does not exist")
+	}
+	return a.trans.analyzeLine(line)
 }

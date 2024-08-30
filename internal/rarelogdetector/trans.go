@@ -1,7 +1,9 @@
 package rarelogdetector
 
 import (
+	"fmt"
 	"goRareLogDetector/pkg/utils"
+	"math"
 	"regexp"
 	"sort"
 	"strings"
@@ -246,7 +248,7 @@ func (t *trans) calcPhrasesScore() error {
 }
 
 func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
-	registerItem bool, matchRate float64) (int, int) {
+	registerItem bool, matchRate float64) (int, int, int) {
 	var te *items
 	if t.preTermRegistered {
 		te = t.preTerms
@@ -255,18 +257,32 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 	}
 	n := len(tokens)
 	counts := make([]int, n)
+	sortedCounts := make([]int, n)
 	matchedPhrase := make([]int, 0)
 	phrase := make([]int, 0)
 
 	for i, itemID := range tokens {
 		counts[i] = te.getCount(itemID)
+		sortedCounts[i] = counts[i]
 	}
+	sort.Slice(sortedCounts, func(i, j int) bool {
+		return sortedCounts[i] > sortedCounts[j]
+	})
+
+	base := 0
+	if n > 3 {
+		base = sortedCounts[2]
+	} else {
+		base = sortedCounts[n-1]
+	}
+	termCountBorder := int(math.Ceil(float64(base) * cTermCountBorderRate))
 
 	for i, count := range counts {
-		if count > t.termCountBorder {
+		if count > termCountBorder {
 			phrase = append(phrase, tokens[i])
 		}
 	}
+
 	if len(phrase) <= 3 {
 		phrase = tokens
 	}
@@ -288,7 +304,7 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 		indexes := utils.SortIndexByIntValue(counts, false)
 		newLen := minLen
 		for i := minLen; i < n; i++ {
-			if counts[indexes[i]] <= t.termCountBorder {
+			if counts[indexes[i]] <= termCountBorder {
 				if counts[indexes[i]] < counts[indexes[i-1]] {
 					newLen = i //apply "i-1" as index, as len it is "i"
 					break
@@ -340,7 +356,7 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 		t.latestUpdate = lastUpdate
 	}
 
-	return matchedPhraseID, phraseID
+	return matchedPhraseID, phraseID, termCountBorder
 }
 
 /*
@@ -483,7 +499,7 @@ func (t *trans) toTermList(line string, lastUpdate int64, registerItem, register
 
 func (t *trans) tokenizeLine(line string, fileEpoch int64,
 	registerItem, registerPreTerms bool,
-	matchRate float64) (int, int, error) {
+	matchRate float64) (int, int, int, []int, error) {
 	var lastdt time.Time
 	var err error
 
@@ -492,6 +508,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 	matchedPhraseCnt := -1
 	yearDay := 0
 	lastUpdate := fileEpoch
+	termCountBorder := -1
 	if t.timestampPos >= 0 || t.messagePos >= 0 {
 		match := t.logFormatRe.FindStringSubmatch(line)
 		if len(match) > 0 {
@@ -514,7 +531,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 		if t.matchedPhrases.DataDir != "" && !t.readOnly && t.blockSize > 0 {
 			if t.matchedPhrases.currItemCount >= t.blockSize || (t.currYearDay > 0 && yearDay > t.currYearDay) {
 				if err := t.next(); err != nil {
-					return -1, -1, err
+					return -1, -1, -1, nil, err
 				}
 			}
 		}
@@ -524,7 +541,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 
 	tokens, err := t.toTermList(line, lastUpdate, registerItem, registerPreTerms)
 	if err != nil {
-		return -1, -1, err
+		return -1, -1, -1, nil, err
 	}
 
 	t.countByDay++
@@ -532,7 +549,12 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 	if registerPreTerms {
 		t.totalLines++
 	} else {
-		matchedPhraseID, phraseID := t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, matchRate)
+		//if strings.Contains(line, "[knobayashi] Inactivity timeout") {
+		//	println("here")
+		//}
+		matchedPhraseID := -1
+		phraseID := -1
+		matchedPhraseID, phraseID, termCountBorder = t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, matchRate)
 		matchedPhraseCnt = t.matchedPhrases.getCount(matchedPhraseID)
 		phraseCnt = t.phrases.getCount(phraseID)
 	}
@@ -547,7 +569,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 	}
 	t.currYearDay = yearDay
 
-	return matchedPhraseCnt, phraseCnt, nil
+	return matchedPhraseCnt, phraseCnt, termCountBorder, tokens, nil
 }
 
 // Rotate phrases and terms together to remove oldest items in the same timeline
@@ -625,4 +647,21 @@ func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64, ignoreMatchRat
 	}
 
 	return scores
+}
+
+func (t *trans) analyzeLine(line string) error {
+	te := t.terms
+
+	_, _, termCountBorder, token, err := t.tokenizeLine(line, 0, false, false, 1.0)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("border=%d\n", termCountBorder)
+	for _, termID := range token {
+		word := te.getMember(termID)
+		cnt := te.getCount(termID)
+		fmt.Printf("%s: %d\n", word, cnt)
+	}
+
+	return nil
 }

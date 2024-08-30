@@ -291,6 +291,18 @@ func (i *items) DeepCopy() *items {
 }
 
 func (i *items) getCountBorder(rate float64) int {
+	counts := i.counts
+
+	maxCnt := 0
+	for _, cnt := range counts {
+		if cnt > maxCnt {
+			maxCnt = cnt
+		}
+	}
+	return int(float64(maxCnt) * rate)
+}
+
+func (i *items) OLDgetCountBorder(rate float64) int {
 	// Convert the map to a slice of key-value pairs
 	var sortedCounts []int
 	for _, v := range i.counts {

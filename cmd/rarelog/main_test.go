@@ -53,7 +53,8 @@ func Test_main_config(t *testing.T) {
 }
 
 func Test_real(t *testing.T) {
-	conf := "/home/ubuntu/logandata/openvpn.yml"
+	//conf := "/home/ubuntu/logandata/openvpn.yml"
+	conf := "/home/administrator/tests/openvpn.yaml"
 	os.Args = []string{"rarelog", "-m", "feed", "-c", conf}
 	main()
 }
