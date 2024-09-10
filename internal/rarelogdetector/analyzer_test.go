@@ -41,18 +41,18 @@ func Test_Analyzer_Run(t *testing.T) {
 		}
 	}
 
-	if err := utils.GetGotExpErr("total count of phrases #1", len(a.trans.matchedPhrases.members), 6); err != nil {
+	if err := utils.GetGotExpErr("total count of phrases #1", len(a.trans.phrases.members), 6); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
-	phraseID := a.trans.matchedPhrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006")
-	phraseCnt := a.trans.matchedPhrases.getCount(phraseID)
+	phraseID := a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006")
+	phraseCnt := a.trans.phrases.getCount(phraseID)
 	if err := utils.GetGotExpErr("phrase count", phraseCnt, 5); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
-	lastValue := a.trans.matchedPhrases.getLastValue(phraseID)
+	lastValue := a.trans.phrases.getLastValue(phraseID)
 	explected := "Jul 31 20:24:20 Comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006 uniq020"
 	if err := utils.GetGotExpErr("last value", lastValue, explected); err != nil {
 		t.Errorf("%v", err)
@@ -76,8 +76,8 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	phraseID = a.trans.matchedPhrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006")
-	lastValue = a.trans.matchedPhrases.getLastValue(phraseID)
+	phraseID = a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006")
+	lastValue = a.trans.phrases.getLastValue(phraseID)
 	explected = "Jul 31 20:24:20 Comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006 uniq020"
 	if err := utils.GetGotExpErr("last value", lastValue, explected); err != nil {
 		t.Errorf("%v", err)
@@ -94,7 +94,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		}
 	}
 
-	if err := utils.GetGotExpErr("total count of phrases #2", len(a.trans.matchedPhrases.members), 8); err != nil {
+	if err := utils.GetGotExpErr("total count of phrases #2", len(a.trans.phrases.members), 8); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -124,15 +124,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		t.Errorf("%v", err)
 		return
 	}
-	if err := utils.GetGotExpErr("results[1].matchedCount", results[1].matchedCount, 4); err != nil {
-		t.Errorf("%v", err)
-		return
-	}
 	if err := utils.GetGotExpErr("results[1].count", results[1].count, 4); err != nil {
-		t.Errorf("%v", err)
-		return
-	}
-	if err := utils.GetGotExpErr("results[2].matchedCount", results[3].matchedCount, 1); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -173,7 +165,7 @@ func Test_Analyzer_TopN(t *testing.T) {
 		return
 	}
 
-	res, err := a.TopN(3, 1, 100, false)
+	res, err := a.TopN(3, 1, 100)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -228,7 +220,7 @@ func Test_Analyzer_YearDay(t *testing.T) {
 		return
 	}
 
-	blockCount := a.trans.matchedPhrases.CountFromStatusTable(nil)
+	blockCount := a.trans.phrases.CountFromStatusTable(nil)
 	if err := utils.GetGotExpErr("after feed: block count", blockCount, 5); err != nil {
 		t.Errorf("%v", err)
 		return

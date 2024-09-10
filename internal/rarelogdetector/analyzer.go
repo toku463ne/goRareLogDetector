@@ -36,9 +36,8 @@ type Analyzer struct {
 }
 
 type phraseCnt struct {
-	count        int
-	matchedCount int
-	line         string
+	count int
+	line  string
 }
 
 type termCntCount struct {
@@ -62,7 +61,12 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	a.blockSize = blockSize
 	a.maxBlocks = maxBlocks
 	a.daysToKeep = daysToKeep
-	a.matchRate = matchRate
+	if matchRate == 0 {
+		a.matchRate = 0.6
+	} else {
+		a.matchRate = matchRate
+
+	}
 	a.readOnly = readOnly
 
 	if err := a.open(); err != nil {
@@ -365,15 +369,24 @@ func (a *Analyzer) initFilePointer() error {
 
 func (a *Analyzer) Feed(targetLinesCnt int) error {
 	logrus.Infof("Counting terms")
-	if _, err := a._run(targetLinesCnt, true, false); err != nil {
+	if _, err := a._run(targetLinesCnt, true, false, false); err != nil {
 		return err
 	}
 
 	a.initBlocks()
 	a.trans.currYearDay = 0
 
+	logrus.Debug("Starting phrase tree registration")
+	if _, err := a._run(0, false, true, false); err != nil {
+		return err
+	}
+	logrus.Debug("Completed phrase tree registration")
+
+	a.initBlocks()
+	a.trans.currYearDay = 0
+
 	logrus.Infof("Analyzing log")
-	if _, err := a._run(targetLinesCnt, false, false); err != nil {
+	if _, err := a._run(targetLinesCnt, false, false, false); err != nil {
 		return err
 	}
 
@@ -382,7 +395,7 @@ func (a *Analyzer) Feed(targetLinesCnt int) error {
 
 func (a *Analyzer) Detect() ([]phraseCnt, error) {
 	logrus.Debug("Starting term registration")
-	if _, err := a._run(0, true, false); err != nil {
+	if _, err := a._run(0, true, false, false); err != nil {
 		return nil, err
 	}
 	logrus.Debug("Completed term registration")
@@ -390,8 +403,17 @@ func (a *Analyzer) Detect() ([]phraseCnt, error) {
 	a.initBlocks()
 	a.trans.currYearDay = 0
 
+	logrus.Debug("Starting phrase tree registration")
+	if _, err := a._run(0, false, true, false); err != nil {
+		return nil, err
+	}
+	logrus.Debug("Completed phrase tree registration")
+
+	a.initBlocks()
+	a.trans.currYearDay = 0
+
 	logrus.Debug("Starting log analyzing")
-	results, err := a._run(0, false, true)
+	results, err := a._run(0, false, false, true)
 	if err != nil {
 		return nil, err
 	}
@@ -400,31 +422,33 @@ func (a *Analyzer) Detect() ([]phraseCnt, error) {
 	return results, nil
 }
 
-func (a *Analyzer) DetectAndShow() error {
+func (a *Analyzer) DetectAndShow(M int) error {
 	results, err := a.Detect()
 	if err != nil {
 		return err
 	}
 	for _, res := range results {
-		fmt.Printf("%d,%s\n", res.count, res.line)
+		if res.count >= M {
+			fmt.Printf("%d,%s\n", res.count, res.line)
+		}
 	}
 	return nil
 }
 
-func (a *Analyzer) TopN(N, minCnt, days int, ignoreMatchRate bool) ([]phraseScore, error) {
+func (a *Analyzer) TopN(N, minCnt, days int) ([]phraseScore, error) {
 	if err := a.Feed(0); err != nil {
 		return nil, err
 	}
 	maxLastUpdate := utils.AddDaysToEpoch(a.trans.latestUpdate, -N)
-	phraseScores := a.trans.getTopNScores(N, minCnt, maxLastUpdate, ignoreMatchRate)
+	phraseScores := a.trans.getTopNScores(N, minCnt, maxLastUpdate)
 
 	return phraseScores, nil
 }
 
-func (a *Analyzer) TopNShow(N, minCnt, days int, ignoreMatchRate bool) error {
+func (a *Analyzer) TopNShow(N, minCnt, days int) error {
 	var err error
 	var phraseScores []phraseScore
-	phraseScores, err = a.TopN(N, minCnt, days, ignoreMatchRate)
+	phraseScores, err = a.TopN(N, minCnt, days)
 	if err != nil {
 		return err
 	}
@@ -457,7 +481,7 @@ func (a *Analyzer) termCountCounts() []termCntCount {
 }
 
 func (a *Analyzer) TermCountCountsShow(N int) error {
-	if _, err := a._run(0, true, false); err != nil {
+	if _, err := a._run(0, true, false, false); err != nil {
 		return err
 	}
 	counts := a.termCountCounts()
@@ -473,9 +497,13 @@ func (a *Analyzer) TermCountCountsShow(N int) error {
 	return nil
 }
 
-func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bool) ([]phraseCnt, error) {
+func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms, registerPT bool, detectMode bool) ([]phraseCnt, error) {
 	var results []phraseCnt
 	linesProcessed := 0
+	registerItems := true
+	if registerPT {
+		registerItems = false
+	}
 
 	if err := a.initFilePointer(); err != nil {
 		return nil, err
@@ -492,8 +520,8 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bo
 			continue
 		}
 
-		cnt, cnt2, _, _, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), true,
-			registerPreTerms, a.matchRate)
+		cnt, _, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), registerItems,
+			registerPreTerms, registerPT, a.matchRate)
 		if err != nil {
 			return nil, err
 		}
@@ -508,8 +536,7 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bo
 		if detectMode {
 			if a.trans.match(te) {
 				p := new(phraseCnt)
-				p.count = cnt2
-				p.matchedCount = cnt
+				p.count = cnt
 				p.line = te
 				results = append(results, *p)
 			}
@@ -520,7 +547,7 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bo
 			break
 		}
 	}
-	if !registerPreTerms && !a.readOnly {
+	if !registerPreTerms && !registerPT && !a.readOnly {
 		if err := a.commit(false); err != nil {
 			return nil, err
 		}
@@ -530,6 +557,8 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms bool, detectMode bo
 		a.trans.preTermRegistered = true
 		//a.trans.calcStats()
 		a.trans.calcCountBorder()
+	} else if registerPT {
+		a.trans.ptRegistered = true
 	} else {
 		a.trans.calcPhrasesScore()
 	}

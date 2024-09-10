@@ -299,7 +299,7 @@ func (i *items) getCountBorder(rate float64) int {
 			maxCnt = cnt
 		}
 	}
-	return int(float64(maxCnt) * rate)
+	return int(math.Ceil(float64(maxCnt) * rate))
 }
 
 func (i *items) OLDgetCountBorder(rate float64) int {
