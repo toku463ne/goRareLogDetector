@@ -269,7 +269,7 @@ func (t *trans) registerPt(tokens []int) {
 	}
 }
 
-func (t *trans) searchPt(tokens []int, minLen int) (int, int) {
+func (t *trans) searchPt(tokens []int, minLen, maxLen int) (int, int) {
 	pt := t.pt
 	ok := false
 	_, sortedTerms, sortedCounts := t.sortTokensByCount(tokens)
@@ -285,6 +285,9 @@ func (t *trans) searchPt(tokens []int, minLen int) (int, int) {
 			if i+1 > minLen {
 				return sortedCounts[i-1], i
 			}
+		}
+		if maxLen >= minLen && i+1 >= maxLen {
+			return sortedCounts[i], i
 		}
 	}
 	return sortedCounts[len(sortedCounts)-1], -1
@@ -325,7 +328,7 @@ func (t *trans) sortTokensByCount(tokens []int) ([]int, []int, []int) {
 }
 
 func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
-	registerItem bool, matchRate float64) int {
+	registerItem bool, minMatchRate, maxMatchRate float64) int {
 
 	var te *items
 	if t.preTermRegistered {
@@ -341,11 +344,13 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 		counts[i] = te.getCount(itemID)
 	}
 
+	maxLen := 0
 	minLen := 3
 	if n > 3 {
-		minLen = int(math.Floor(float64(n) * matchRate))
+		minLen = int(math.Floor(float64(n) * minMatchRate))
+		maxLen = int(math.Floor(float64(n) * maxMatchRate))
 	}
-	minCnt, pos := t.searchPt(tokens, minLen)
+	minCnt, pos := t.searchPt(tokens, minLen, maxLen)
 
 	if pos >= minLen {
 		for i, count := range counts {
@@ -428,7 +433,7 @@ func (t *trans) toTermList(line string, lastUpdate int64, registerItem, register
 }
 
 func (t *trans) tokenizeLine(line string, fileEpoch int64,
-	registerItem, registerPreTerms, registerPT bool, matchRate float64) (int, []int, error) {
+	registerItem, registerPreTerms, registerPT bool, minMatchRate, maxMatchRate float64) (int, []int, error) {
 	var lastdt time.Time
 	var err error
 
@@ -485,7 +490,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 			return -1, nil, errors.New("phrase tree not registered")
 		}
 		phraseID := -1
-		phraseID = t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, matchRate)
+		phraseID = t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, minMatchRate, maxMatchRate)
 		phraseCnt = t.phrases.getCount(phraseID)
 	}
 
@@ -575,7 +580,7 @@ func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64) []phraseScore 
 func (t *trans) analyzeLine(line string) error {
 	te := t.terms
 
-	_, token, err := t.tokenizeLine(line, 0, false, false, false, 1.0)
+	_, token, err := t.tokenizeLine(line, 0, false, false, false, 1.0, 0.0)
 	if err != nil {
 		return err
 	}

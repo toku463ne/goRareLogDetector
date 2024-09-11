@@ -32,7 +32,8 @@ type Analyzer struct {
 	rowID           int64
 	readOnly        bool
 	linesProcessed  int
-	matchRate       float64
+	minMatchRate    float64
+	maxMatchRate    float64
 }
 
 type phraseCnt struct {
@@ -48,7 +49,7 @@ type termCntCount struct {
 func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	searchRegex, exludeRegex []string,
 	maxBlocks, blockSize, daysToKeep int,
-	matchRate float64,
+	minMatchRate, maxMatchRate float64,
 	readOnly bool) (*Analyzer, error) {
 	a := new(Analyzer)
 	a.dataDir = dataDir
@@ -61,11 +62,15 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	a.blockSize = blockSize
 	a.maxBlocks = maxBlocks
 	a.daysToKeep = daysToKeep
-	if matchRate == 0 {
-		a.matchRate = 0.6
+	if minMatchRate == 0 {
+		a.minMatchRate = 0.6
 	} else {
-		a.matchRate = matchRate
-
+		a.minMatchRate = minMatchRate
+	}
+	if maxMatchRate == 0 {
+		a.maxMatchRate = 0.0
+	} else {
+		a.maxMatchRate = maxMatchRate
 	}
 	a.readOnly = readOnly
 
@@ -229,7 +234,7 @@ func (a *Analyzer) loadStatus() error {
 	if err := a.configTable.Select1Row(nil,
 		tableDefs["config"],
 		&a.logPath,
-		&a.blockSize, &a.maxBlocks, &a.matchRate,
+		&a.blockSize, &a.maxBlocks, &a.minMatchRate, &a.maxMatchRate,
 		&a.logFormat); err != nil {
 		return err
 	}
@@ -309,11 +314,12 @@ func (a *Analyzer) saveConfig() error {
 				"filterRe", "xFilterRe"}
 	*/
 	if err := a.configTable.Upsert(nil, map[string]interface{}{
-		"logPath":   a.logPath,
-		"blockSize": a.blockSize,
-		"maxBlocks": a.maxBlocks,
-		"matchRate": a.matchRate,
-		"logFormat": a.logFormat,
+		"logPath":      a.logPath,
+		"blockSize":    a.blockSize,
+		"maxBlocks":    a.maxBlocks,
+		"minMatchRate": a.minMatchRate,
+		"maxMatchRate": a.maxMatchRate,
+		"logFormat":    a.logFormat,
 	}); err != nil {
 		return err
 	}
@@ -521,7 +527,7 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms, registerPT bool, d
 		}
 
 		cnt, _, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), registerItems,
-			registerPreTerms, registerPT, a.matchRate)
+			registerPreTerms, registerPT, a.minMatchRate, a.maxMatchRate)
 		if err != nil {
 			return nil, err
 		}

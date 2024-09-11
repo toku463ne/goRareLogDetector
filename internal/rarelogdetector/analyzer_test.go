@@ -19,7 +19,7 @@ func Test_Analyzer_Run(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -70,7 +70,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, false)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -108,7 +108,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, true)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, 0, true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -135,6 +135,55 @@ func Test_Analyzer_Run(t *testing.T) {
 
 }
 
+func Test_Analyzer_Run2(t *testing.T) {
+	testDir, err := utils.InitTestDir("Test_Analyzer_Run2")
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	logPath := fmt.Sprintf("%s/sample.log*", testDir)
+	logFormat := `^(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<message>.+)$`
+	layout := "Jan 2 15:04:05"
+	dataDir := testDir + "/data"
+
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, 0.8, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if _, err := utils.CopyFile("../../test/data/rarelogdetector/analyzer/sample.log.1",
+		fmt.Sprintf("%s/sample.log.1", testDir)); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if err := a.Feed(0); err != nil {
+		t.Errorf("%v", err)
+		return
+	} else {
+		if err := utils.GetGotExpErr("lines processed", a.linesProcessed, 20); err != nil {
+			t.Errorf("%v", err)
+			return
+		}
+	}
+
+	if err := utils.GetGotExpErr("total count of phrases #1", len(a.trans.phrases.members), 1); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	phraseID := a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8")
+	phraseCnt := a.trans.phrases.getCount(phraseID)
+	if err := utils.GetGotExpErr("phrase count", phraseCnt, 20); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	a.Close()
+}
+
 func Test_Analyzer_TopN(t *testing.T) {
 	testDir, err := utils.InitTestDir("Test_Analyzer_TopN")
 	if err != nil {
@@ -146,7 +195,7 @@ func Test_Analyzer_TopN(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -199,7 +248,7 @@ func Test_Analyzer_YearDay(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 0, 0, 5, 0, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 0, 0, 5, 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return

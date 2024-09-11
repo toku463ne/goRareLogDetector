@@ -35,7 +35,8 @@ var (
 	maxBlocks       int
 	blockSize       int
 	daysToKeep      int
-	matchRate       float64
+	minMatchRate    float64
+	maxMatchRate    float64
 	N               int
 	M               int
 	D               int
@@ -50,7 +51,8 @@ type config struct {
 	LogFormat       string   `yaml:"logFormat"`
 	TimestampLayout string   `yaml:"timestampLayout"`
 	DaysToKeep      int      `yaml:"daysToKeep"`
-	MatchRate       float64  `yaml:"matchRate"`
+	MinMatchRate    float64  `yaml:"minMatchRate"`
+	MaxMatchRate    float64  `yaml:"maxMatchRate"`
 }
 
 func init() {
@@ -64,7 +66,8 @@ func init() {
 	flag.StringVar(&searchString, "s", "", "Search string")
 	flag.StringVar(&excludeString, "x", "", "Exclude string")
 	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed|termCounts|analyzeLine")
-	flag.Float64Var(&matchRate, "r", 0.6, "It is considered 2 log lines 'match', if more than matchRate number of terms in a log line matches.")
+	flag.Float64Var(&minMatchRate, "r", 0.6, "It is considered 2 log lines 'match', if more than matchRate number of terms in a log line matches.")
+	flag.Float64Var(&maxMatchRate, "r", 0.0, "Do not check more terms than this rate when grouping lines")
 	flag.IntVar(&N, "N", 0, "Show Top N rare logs in topN mode")
 	flag.IntVar(&M, "M", 0, "Show ony logs appeared M times in topN mode")
 	flag.IntVar(&D, "D", 0, "Recent days to show in topN mode")
@@ -216,7 +219,7 @@ func run() error {
 		a, err = rarelogdetector.NewAnalyzer(dataDir, logPath, logFormat, timestampLayout,
 			searchStrings, excludeStrings,
 			maxBlocks, blockSize, daysToKeep,
-			matchRate,
+			minMatchRate, maxMatchRate,
 			readOnly)
 	}
 	if err != nil {
