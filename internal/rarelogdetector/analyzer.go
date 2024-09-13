@@ -37,8 +37,9 @@ type Analyzer struct {
 }
 
 type phraseCnt struct {
-	count int
-	line  string
+	count     int
+	line      string
+	phrasestr string
 }
 
 type termCntCount struct {
@@ -436,25 +437,26 @@ func (a *Analyzer) DetectAndShow(M int) error {
 	for _, res := range results {
 		if res.count >= M {
 			fmt.Printf("%d,%s\n", res.count, res.line)
+			fmt.Printf("  =>  %s\n\n", res.phrasestr)
 		}
 	}
 	return nil
 }
 
-func (a *Analyzer) TopN(N, minCnt, days int) ([]phraseScore, error) {
+func (a *Analyzer) TopN(N, minCnt, days int, showPhrase bool) ([]phraseScore, error) {
 	if err := a.Feed(0); err != nil {
 		return nil, err
 	}
 	maxLastUpdate := utils.AddDaysToEpoch(a.trans.latestUpdate, -N)
-	phraseScores := a.trans.getTopNScores(N, minCnt, maxLastUpdate)
+	phraseScores := a.trans.getTopNScores(N, minCnt, maxLastUpdate, showPhrase)
 
 	return phraseScores, nil
 }
 
-func (a *Analyzer) TopNShow(N, minCnt, days int) error {
+func (a *Analyzer) TopNShow(N, minCnt, days int, showPhrase bool) error {
 	var err error
 	var phraseScores []phraseScore
-	phraseScores, err = a.TopN(N, minCnt, days)
+	phraseScores, err = a.TopN(N, minCnt, days, showPhrase)
 	if err != nil {
 		return err
 	}
@@ -526,7 +528,7 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms, registerPT bool, d
 			continue
 		}
 
-		cnt, _, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), registerItems,
+		cnt, _, phrasestr, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), registerItems,
 			registerPreTerms, registerPT, a.minMatchRate, a.maxMatchRate)
 		if err != nil {
 			return nil, err
@@ -544,6 +546,7 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms, registerPT bool, d
 				p := new(phraseCnt)
 				p.count = cnt
 				p.line = te
+				p.phrasestr = phrasestr
 				results = append(results, *p)
 			}
 		}

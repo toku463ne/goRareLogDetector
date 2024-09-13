@@ -40,6 +40,7 @@ var (
 	N               int
 	M               int
 	D               int
+	showPhrase      bool
 	line            string
 )
 
@@ -71,6 +72,7 @@ func init() {
 	flag.IntVar(&N, "N", 0, "Show Top N rare logs in topN mode")
 	flag.IntVar(&M, "M", 0, "Show ony logs appeared M times in topN mode")
 	flag.IntVar(&D, "D", 0, "Recent days to show in topN mode")
+	flag.BoolVar(&showPhrase, "showPhrase", true, "If show phrase instead of the last log value in the phrase group.")
 	flag.StringVar(&line, "line", "", "Log line to analyze")
 
 	logFormat = ""
@@ -231,7 +233,7 @@ func run() error {
 	case "detect":
 		err = a.DetectAndShow(M)
 	case "topN":
-		err = a.TopNShow(N, M, D)
+		err = a.TopNShow(N, M, D, showPhrase)
 	case "termCounts":
 		a.TermCountCountsShow(N)
 	case "analyzeLine":

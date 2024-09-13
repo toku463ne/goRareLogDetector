@@ -46,7 +46,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	phraseID := a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006")
+	phraseID := a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006 *")
 	phraseCnt := a.trans.phrases.getCount(phraseID)
 	if err := utils.GetGotExpErr("phrase count", phraseCnt, 5); err != nil {
 		t.Errorf("%v", err)
@@ -76,7 +76,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	phraseID = a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006")
+	phraseID = a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006 *")
 	lastValue = a.trans.phrases.getLastValue(phraseID)
 	explected = "Jul 31 20:24:20 Comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 part006 uniq020"
 	if err := utils.GetGotExpErr("last value", lastValue, explected); err != nil {
@@ -174,7 +174,7 @@ func Test_Analyzer_Run2(t *testing.T) {
 		return
 	}
 
-	phraseID := a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8")
+	phraseID := a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 * *")
 	phraseCnt := a.trans.phrases.getCount(phraseID)
 	if err := utils.GetGotExpErr("phrase count", phraseCnt, 20); err != nil {
 		t.Errorf("%v", err)
@@ -214,7 +214,7 @@ func Test_Analyzer_TopN(t *testing.T) {
 		return
 	}
 
-	res, err := a.TopN(3, 1, 100)
+	res, err := a.TopN(3, 1, 100, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return

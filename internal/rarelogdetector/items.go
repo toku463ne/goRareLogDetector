@@ -93,7 +93,7 @@ func (i *items) register(item string, addCount int, lastUpdate int64, lastValue 
 
 func (i *items) getMember(itemID int) string {
 	if itemID < 0 {
-		return "-"
+		return "*"
 	}
 	return i.memberMap[itemID]
 }

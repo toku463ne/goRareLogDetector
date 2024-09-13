@@ -328,7 +328,7 @@ func (t *trans) sortTokensByCount(tokens []int) ([]int, []int, []int) {
 }
 
 func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
-	registerItem bool, minMatchRate, maxMatchRate float64) int {
+	registerItem bool, minMatchRate, maxMatchRate float64) (int, string) {
 
 	var te *items
 	if t.preTermRegistered {
@@ -356,11 +356,15 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 		for i, count := range counts {
 			if count >= minCnt {
 				phrase = append(phrase, tokens[i])
+			} else {
+				phrase = append(phrase, cAsteriskItemID)
 			}
 		}
 	} else {
 		for i, count := range counts {
 			if count > t.termCountBorder {
+				phrase = append(phrase, tokens[i])
+			} else {
 				phrase = append(phrase, tokens[i])
 			}
 		}
@@ -386,7 +390,7 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 		t.latestUpdate = lastUpdate
 	}
 
-	return phraseID
+	return phraseID, phrasestr
 }
 
 func (t *trans) toTermList(line string, lastUpdate int64, registerItem, registerPreTerms bool) ([]int, error) {
@@ -433,9 +437,11 @@ func (t *trans) toTermList(line string, lastUpdate int64, registerItem, register
 }
 
 func (t *trans) tokenizeLine(line string, fileEpoch int64,
-	registerItem, registerPreTerms, registerPT bool, minMatchRate, maxMatchRate float64) (int, []int, error) {
+	registerItem, registerPreTerms, registerPT bool,
+	minMatchRate, maxMatchRate float64) (int, []int, string, error) {
 	var lastdt time.Time
 	var err error
+	phrasestr := ""
 
 	orgLine := line
 	phraseCnt := -1
@@ -463,7 +469,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 		if t.phrases.DataDir != "" && !t.readOnly && t.blockSize > 0 {
 			if t.phrases.currItemCount >= t.blockSize || (t.currYearDay > 0 && yearDay > t.currYearDay) {
 				if err := t.next(); err != nil {
-					return -1, nil, err
+					return -1, nil, "", err
 				}
 			}
 		}
@@ -473,7 +479,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 
 	tokens, err := t.toTermList(line, lastUpdate, registerItem, registerPreTerms)
 	if err != nil {
-		return -1, nil, err
+		return -1, nil, "", err
 	}
 
 	t.countByDay++
@@ -487,10 +493,10 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 		//	println("here")
 		//}
 		if !t.ptRegistered {
-			return -1, nil, errors.New("phrase tree not registered")
+			return -1, nil, "", errors.New("phrase tree not registered")
 		}
 		phraseID := -1
-		phraseID = t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, minMatchRate, maxMatchRate)
+		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, minMatchRate, maxMatchRate)
 		phraseCnt = t.phrases.getCount(phraseID)
 	}
 
@@ -504,7 +510,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 	}
 	t.currYearDay = yearDay
 
-	return phraseCnt, tokens, nil
+	return phraseCnt, tokens, phrasestr, nil
 }
 
 // Rotate phrases and terms together to remove oldest items in the same timeline
@@ -544,14 +550,19 @@ func (t *trans) match(text string) bool {
 	return !matched
 }
 
-func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64) []phraseScore {
+func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64, showPhrase bool) []phraseScore {
 	phraseScores := t.phraseScores
 	var p *items
 	p = t.phrases
 
 	var scores []phraseScore
+	var text string
 	for phraseID, score := range phraseScores {
-		text := p.getLastValue(phraseID)
+		if showPhrase {
+			text = p.getMember(phraseID)
+		} else {
+			text = p.getLastValue(phraseID)
+		}
 
 		if !t.match(text) {
 			continue
@@ -580,10 +591,11 @@ func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64) []phraseScore 
 func (t *trans) analyzeLine(line string) error {
 	te := t.terms
 
-	_, token, err := t.tokenizeLine(line, 0, false, false, false, 1.0, 0.0)
+	_, token, phrasestr, err := t.tokenizeLine(line, 0, false, false, false, 1.0, 0.0)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("%s\n", phrasestr)
 	for _, termID := range token {
 		word := te.getMember(termID)
 		cnt := te.getCount(termID)

@@ -20,4 +20,6 @@ const (
 	cNFilesToCheckCount  = 5
 	cTermCountBorderRate = 0.01
 	cCountbyScoreLen     = 100
+
+	cAsteriskItemID = -1
 )
