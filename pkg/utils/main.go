@@ -238,6 +238,22 @@ func RemovePath(pathRegex string) error {
 	return nil
 }
 
+func RemoveDirectory(dir string) error {
+	// Check if the directory exists
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		// Directory does not exist, nothing to do
+		return nil
+	}
+
+	// Remove the directory and its contents
+	err := os.RemoveAll(dir)
+	if err != nil {
+		return fmt.Errorf("failed to remove directory %s: %w", dir, err)
+	}
+
+	return nil
+}
+
 func _pivotFloatInt(a []float64, i, j int) int {
 	k := i + 1
 	for k <= j && a[i] == a[k] {

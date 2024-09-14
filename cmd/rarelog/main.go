@@ -20,28 +20,29 @@ import (
 var (
 	configPath string
 
-	debug           bool
-	silent          bool
-	readOnly        bool
-	dataDir         string
-	logPath         string
-	searchString    string
-	excludeString   string
-	searchStrings   []string
-	excludeStrings  []string
-	mode            string
-	logFormat       string
-	timestampLayout string
-	maxBlocks       int
-	blockSize       int
-	daysToKeep      int
-	minMatchRate    float64
-	maxMatchRate    float64
-	N               int
-	M               int
-	D               int
-	showPhrase      bool
-	line            string
+	debug               bool
+	silent              bool
+	readOnly            bool
+	dataDir             string
+	logPath             string
+	searchString        string
+	excludeString       string
+	searchStrings       []string
+	excludeStrings      []string
+	mode                string
+	logFormat           string
+	timestampLayout     string
+	maxBlocks           int
+	blockSize           int
+	daysToKeep          int
+	minMatchRate        float64
+	maxMatchRate        float64
+	N                   int
+	M                   int
+	D                   int
+	termCountBorderRate float64
+	showLastText        bool
+	line                string
 )
 
 type config struct {
@@ -72,7 +73,8 @@ func init() {
 	flag.IntVar(&N, "N", 0, "Show Top N rare logs in topN mode")
 	flag.IntVar(&M, "M", 0, "Show ony logs appeared M times in topN mode")
 	flag.IntVar(&D, "D", 0, "Recent days to show in topN mode")
-	flag.BoolVar(&showPhrase, "showPhrase", true, "If show phrase instead of the last log value in the phrase group.")
+	flag.Float64Var(&termCountBorderRate, "R", 0.0, "Words that have less number than this rate will be ignored")
+	flag.BoolVar(&showLastText, "showLastText", false, "If show the last text in the phrase group instead of the phrase.")
 	flag.StringVar(&line, "line", "", "Log line to analyze")
 
 	logFormat = ""
@@ -231,9 +233,9 @@ func run() error {
 	case "feed":
 		err = a.Feed(0)
 	case "detect":
-		err = a.DetectAndShow(M)
+		err = a.DetectAndShow(M, termCountBorderRate)
 	case "topN":
-		err = a.TopNShow(N, M, D, showPhrase)
+		err = a.TopNShow(N, M, D, showLastText, termCountBorderRate)
 	case "termCounts":
 		a.TermCountCountsShow(N)
 	case "analyzeLine":

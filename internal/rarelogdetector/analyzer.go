@@ -360,6 +360,14 @@ func (a *Analyzer) Close() {
 	}
 }
 
+func (a *Analyzer) Purge() error {
+	a.Close()
+	if err := utils.RemoveDirectory(a.dataDir); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (a *Analyzer) initFilePointer() error {
 	var err error
 	if a.fp == nil || !a.fp.IsOpen() {
@@ -400,7 +408,7 @@ func (a *Analyzer) Feed(targetLinesCnt int) error {
 	return nil
 }
 
-func (a *Analyzer) Detect() ([]phraseCnt, error) {
+func (a *Analyzer) Detect(termCountBorderRate float64) ([]phraseCnt, error) {
 	logrus.Debug("Starting term registration")
 	if _, err := a._run(0, true, false, false); err != nil {
 		return nil, err
@@ -419,6 +427,10 @@ func (a *Analyzer) Detect() ([]phraseCnt, error) {
 	a.initBlocks()
 	a.trans.currYearDay = 0
 
+	if termCountBorderRate > 0 {
+		a.trans.calcCountBorder(termCountBorderRate)
+	}
+
 	logrus.Debug("Starting log analyzing")
 	results, err := a._run(0, false, false, true)
 	if err != nil {
@@ -429,8 +441,8 @@ func (a *Analyzer) Detect() ([]phraseCnt, error) {
 	return results, nil
 }
 
-func (a *Analyzer) DetectAndShow(M int) error {
-	results, err := a.Detect()
+func (a *Analyzer) DetectAndShow(M int, termCountBorderRate float64) error {
+	results, err := a.Detect(termCountBorderRate)
 	if err != nil {
 		return err
 	}
@@ -443,20 +455,22 @@ func (a *Analyzer) DetectAndShow(M int) error {
 	return nil
 }
 
-func (a *Analyzer) TopN(N, minCnt, days int, showPhrase bool) ([]phraseScore, error) {
+func (a *Analyzer) TopN(N, minCnt, days int,
+	showLastText bool, termCountBorderRate float64) ([]phraseScore, error) {
 	if err := a.Feed(0); err != nil {
 		return nil, err
 	}
 	maxLastUpdate := utils.AddDaysToEpoch(a.trans.latestUpdate, -N)
-	phraseScores := a.trans.getTopNScores(N, minCnt, maxLastUpdate, showPhrase)
+	phraseScores := a.trans.getTopNScores(N, minCnt, maxLastUpdate, showLastText, termCountBorderRate)
 
 	return phraseScores, nil
 }
 
-func (a *Analyzer) TopNShow(N, minCnt, days int, showPhrase bool) error {
+func (a *Analyzer) TopNShow(N, minCnt, days int,
+	showLastText bool, termCountBorderRate float64) error {
 	var err error
 	var phraseScores []phraseScore
-	phraseScores, err = a.TopN(N, minCnt, days, showPhrase)
+	phraseScores, err = a.TopN(N, minCnt, days, showLastText, termCountBorderRate)
 	if err != nil {
 		return err
 	}
@@ -565,7 +579,7 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms, registerPT bool, d
 	if registerPreTerms {
 		a.trans.preTermRegistered = true
 		//a.trans.calcStats()
-		a.trans.calcCountBorder()
+		a.trans.calcCountBorder(cTermCountBorderRate)
 	} else if registerPT {
 		a.trans.ptRegistered = true
 	} else {

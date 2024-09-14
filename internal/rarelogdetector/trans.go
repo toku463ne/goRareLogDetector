@@ -115,8 +115,8 @@ func (t *trans) setBlockSize(blockSize int) {
 		t.phrases.SetBlockSize(blockSize)
 	}
 }
-func (t *trans) calcCountBorder() {
-	t.termCountBorder = t.preTerms.getCountBorder(cTermCountBorderRate)
+func (t *trans) calcCountBorder(rate float64) {
+	t.termCountBorder = t.preTerms.getCountBorder(rate)
 }
 
 func (t *trans) parseLogFormat(logFormat string) {
@@ -550,18 +550,24 @@ func (t *trans) match(text string) bool {
 	return !matched
 }
 
-func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64, showPhrase bool) []phraseScore {
+func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64,
+	showLastText bool, termCountBorderRate float64) []phraseScore {
+	if termCountBorderRate > 0 {
+		if err := t.rearangePhrases(termCountBorderRate); err != nil {
+			return nil
+		}
+	}
+
 	phraseScores := t.phraseScores
-	var p *items
-	p = t.phrases
+	p := t.phrases
 
 	var scores []phraseScore
 	var text string
 	for phraseID, score := range phraseScores {
-		if showPhrase {
-			text = p.getMember(phraseID)
-		} else {
+		if showLastText {
 			text = p.getLastValue(phraseID)
+		} else {
+			text = p.getMember(phraseID)
 		}
 
 		if !t.match(text) {
@@ -600,6 +606,53 @@ func (t *trans) analyzeLine(line string) error {
 		word := te.getMember(termID)
 		cnt := te.getCount(termID)
 		fmt.Printf("%s: %d\n", word, cnt)
+	}
+
+	return nil
+}
+
+func (t *trans) rearangePhrases(termCountBorderRate float64) error {
+	p, err := newItems("", "phrase2", 0, 0, false)
+	if err != nil {
+		return err
+	}
+
+	// if new termCountBorder is equal or less than current, there will be no change
+	oldTermCountBorder := t.termCountBorder
+	t.calcCountBorder(termCountBorderRate)
+	if t.termCountBorder <= oldTermCountBorder {
+		return nil
+	}
+
+	for phraseID, line := range t.phrases.memberMap {
+		cnt := t.phrases.getCount(phraseID)
+		lastUpdate := t.phrases.getLastUpdate(phraseID)
+		lastValue := t.phrases.getLastValue(phraseID)
+
+		len := 0
+		words := strings.Split(line, " ")
+		phrasestr := ""
+		for _, term := range words {
+			termID := t.terms.getItemID(term)
+			termCnt := t.terms.getCount(termID)
+			if termCnt >= t.termCountBorder {
+				phrasestr += " " + term
+				len++
+			} else {
+				phrasestr += " *"
+			}
+		}
+		if len < 3 {
+			phrasestr = line
+		}
+		phrasestr = strings.TrimSpace(phrasestr)
+		p.register(phrasestr, cnt, lastUpdate, lastValue, false)
+	}
+
+	t.phrases = p
+
+	if err := t.calcPhrasesScore(); err != nil {
+		return err
 	}
 
 	return nil

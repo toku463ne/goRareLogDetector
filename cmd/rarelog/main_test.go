@@ -32,7 +32,7 @@ func Test_main_config(t *testing.T) {
 		return
 	}
 
-	res, err := a.TopN(5, 10, 7, false)
+	res, err := a.TopN(5, 10, 7, false, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return

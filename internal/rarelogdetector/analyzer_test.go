@@ -114,7 +114,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	results, err := a.Detect()
+	results, err := a.Detect(0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -214,13 +214,13 @@ func Test_Analyzer_TopN(t *testing.T) {
 		return
 	}
 
-	res, err := a.TopN(3, 1, 100, false)
+	res, err := a.TopN(10, 20, 100, false, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
-	if err := utils.GetGotExpErr("len", len(res), 3); err != nil {
+	if err := utils.GetGotExpErr("len", len(res), 9); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -232,6 +232,34 @@ func Test_Analyzer_TopN(t *testing.T) {
 
 	if res[0].Score < res[1].Score {
 		t.Error()
+		return
+	}
+
+	if err := utils.GetGotExpErr("res[0].count", res[4].Count, 4); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	a.Close()
+
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, 0, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	res, err = a.TopN(10, 20, 100, false, 0.5)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("len", len(res), 4); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if err := utils.GetGotExpErr("res[1].count", res[1].Count, 20); err != nil {
+		t.Errorf("%v", err)
 		return
 	}
 }
