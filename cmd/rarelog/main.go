@@ -67,7 +67,7 @@ func init() {
 	flag.StringVar(&logPath, "f", "", "Log file")
 	flag.StringVar(&searchString, "s", "", "Search string")
 	flag.StringVar(&excludeString, "x", "", "Exclude string")
-	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed|termCounts|analyzeLine")
+	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed|termCounts|analyzeLine|showPhrases")
 	flag.Float64Var(&minMatchRate, "minR", 0.6, "It is considered 2 log lines 'match', if more than matchRate number of terms in a log line matches.")
 	flag.Float64Var(&maxMatchRate, "maxR", 0.0, "Do not check more terms than this rate when grouping lines")
 	flag.IntVar(&N, "N", 0, "Show Top N rare logs in topN mode")
@@ -240,6 +240,8 @@ func run() error {
 		a.TermCountCountsShow(N)
 	case "analyzeLine":
 		a.AnalyzeLine(line)
+	case "showPhrases":
+		a.ShowPhrases(termCountBorderRate)
 	default:
 		err = errors.New("-m: mode must be one of topN|detect|feed")
 	}

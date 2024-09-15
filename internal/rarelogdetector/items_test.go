@@ -19,7 +19,7 @@ func Test_Items(t *testing.T) {
 
 	registerTran := func(it *items, itemCount int, a ...string) error {
 		for _, item := range a {
-			if itemID := it.register(item, itemCount, now, "", true); itemID < 0 {
+			if itemID := it.register(item, itemCount, now, now, "", true); itemID < 0 {
 				return errors.New("Failed to register the item " + item)
 			}
 		}
@@ -382,7 +382,7 @@ func Test_Items(t *testing.T) {
 func Test_ItemsWithDays(t *testing.T) {
 	registerTran := func(epoch int64, it *items, itemCount int, a ...string) error {
 		for _, item := range a {
-			if itemID := it.register(item, itemCount, epoch, "", true); itemID < 0 {
+			if itemID := it.register(item, itemCount, epoch, epoch, "", true); itemID < 0 {
 				return errors.New("Failed to register the item " + item)
 			}
 		}

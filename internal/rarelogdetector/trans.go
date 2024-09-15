@@ -151,7 +151,10 @@ func (t *trans) load() error {
 	if err := t.phrases.load(); err != nil {
 		return err
 	}
-	t.createPtFromPhrases()
+	//t.createPtFromPhrases()
+	if err := t.rearangePhrases(0); err != nil {
+		return err
+	}
 
 	if err := t.calcPhrasesScore(); err != nil {
 		return err
@@ -217,9 +220,13 @@ func (t *trans) calcPhrasesScore() error {
 	phraseScores := make(map[int]float64, 0)
 	for phraseID, line := range p.memberMap {
 		if tokens, err := t.toTermList(line, 0, false, false); err == nil {
-			scores := make([]float64, len(tokens))
-			for i, itemID := range tokens {
-				scores[i] = te.getIdf(itemID)
+			//scores := make([]float64, len(tokens))
+			scores := make([]float64, 0)
+			for _, itemID := range tokens {
+				//scores[i] = te.getIdf(itemID)
+				if itemID >= 0 {
+					scores = append(scores, te.getIdf(itemID))
+				}
 			}
 			ss := 0.0
 			for _, v := range scores {
@@ -385,7 +392,7 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 		phrasestr += " " + word
 	}
 	phrasestr = strings.TrimSpace(phrasestr)
-	phraseID := t.phrases.register(phrasestr, addCnt, lastUpdate, lastValue, registerItem)
+	phraseID := t.phrases.register(phrasestr, addCnt, lastUpdate, lastUpdate, lastValue, registerItem)
 	if lastUpdate > t.latestUpdate {
 		t.latestUpdate = lastUpdate
 	}
@@ -393,7 +400,9 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 	return phraseID, phrasestr
 }
 
-func (t *trans) toTermList(line string, lastUpdate int64, registerItem, registerPreTerms bool) ([]int, error) {
+func (t *trans) toTermList(line string,
+	lastUpdate int64,
+	registerItem, registerPreTerms bool) ([]int, error) {
 	line = t.replacer.Replace(line)
 	words := strings.Split(line, " ")
 	tokens := make([]int, 0)
@@ -425,9 +434,9 @@ func (t *trans) toTermList(line string, lastUpdate int64, registerItem, register
 				continue
 			}
 			if registerPreTerms {
-				termID = t.preTerms.register(word, addCnt, lastUpdate, "", registerItem)
+				termID = t.preTerms.register(word, addCnt, lastUpdate, lastUpdate, "", registerItem)
 			} else {
-				termID = t.terms.register(word, addCnt, lastUpdate, "", registerItem)
+				termID = t.terms.register(word, addCnt, lastUpdate, lastUpdate, "", registerItem)
 			}
 			tokens = append(tokens, termID)
 		}
@@ -654,13 +663,37 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 		}
 		phrasestr = strings.TrimSpace(phrasestr)
 		t.registerPt(tokens)
-		p.register(phrasestr, cnt, lastUpdate, lastValue, false)
+		p.register(phrasestr, cnt, lastUpdate, lastUpdate, lastValue, false)
 	}
 
 	t.phrases = p
 
 	if err := t.calcPhrasesScore(); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (t *trans) outputPhrases(termCountBorderRate float64) error {
+	if termCountBorderRate > 0 {
+		if err := t.rearangePhrases(termCountBorderRate); err != nil {
+			return err
+		}
+	}
+
+	for phraseID, line := range t.phrases.memberMap {
+		if !t.match(line) {
+			continue
+		}
+
+		cnt := t.phrases.getCount(phraseID)
+		createEpoch := t.phrases.getCreateEpoch(phraseID)
+		lastUpdate := t.phrases.getLastUpdate(phraseID)
+		text := t.phrases.getMember(phraseID)
+
+		fmt.Printf("%d,%d,%d,%s\n", cnt, createEpoch, lastUpdate, text)
+
 	}
 
 	return nil

@@ -527,6 +527,13 @@ func (a *Analyzer) TermCountCountsShow(N int) error {
 	return nil
 }
 
+func (a *Analyzer) ShowPhrases(termCountBorderRate float64) error {
+	if err := a.trans.outputPhrases(termCountBorderRate); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (a *Analyzer) _run(targetLinesCnt int,
 	registerPreTerms, registerPT bool, detectMode bool) ([]phraseCnt, error) {
 	var results []phraseCnt

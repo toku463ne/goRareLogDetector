@@ -16,6 +16,7 @@ type items struct {
 	members       map[string]int
 	memberMap     map[int]string
 	counts        map[int]int
+	createEpochs  map[int]int64
 	lastUpdates   map[int]int64
 	lastUpdate    int64
 	lastValues    map[int]string
@@ -38,6 +39,7 @@ func newItems(dataDir, name string, maxBlocks, daysToKeep int, useGzip bool) (*i
 	i.members = make(map[string]int, 10000)
 	i.currCounts = make(map[int]int, 10000)
 	i.lastUpdates = make(map[int]int64, 10000)
+	i.createEpochs = make(map[int]int64, 10000)
 	i.lastValues = make(map[int]string, 10000)
 	i.maxItemID = 0
 
@@ -53,7 +55,9 @@ func (i *items) load() error {
 	return nil
 }
 
-func (i *items) register(item string, addCount int, lastUpdate int64, lastValue string, isNew bool) int {
+func (i *items) register(item string, addCount int,
+	createEpoch, lastUpdate int64,
+	lastValue string, isNew bool) int {
 	if item == "" {
 		return -1
 	}
@@ -68,6 +72,7 @@ func (i *items) register(item string, addCount int, lastUpdate int64, lastValue 
 		i.members[item] = itemID
 		i.memberMap[itemID] = item
 		i.lastUpdates[itemID] = lastUpdate
+		i.createEpochs[itemID] = createEpoch
 		if isNew {
 			i.currItemCount++
 		}
@@ -96,6 +101,13 @@ func (i *items) getMember(itemID int) string {
 		return "*"
 	}
 	return i.memberMap[itemID]
+}
+
+func (i *items) getCreateEpoch(itemID int) int64 {
+	if itemID < 0 {
+		return 0
+	}
+	return i.createEpochs[itemID]
 }
 
 func (i *items) getLastUpdate(itemID int) int64 {
@@ -165,13 +177,14 @@ func (i *items) loadDB() error {
 	for rows.Next() {
 		var item string
 		var itemCount int
+		var createEpoch int64
 		var lastUpdate int64
 		var lastValue string
-		err = rows.Scan(&itemCount, &lastUpdate, &item, &lastValue)
+		err = rows.Scan(&itemCount, &createEpoch, &lastUpdate, &item, &lastValue)
 		if err != nil {
 			return err
 		}
-		i.register(item, itemCount, lastUpdate, lastValue, !rows.BlockCompleted)
+		i.register(item, itemCount, createEpoch, lastUpdate, lastValue, !rows.BlockCompleted)
 	}
 	return nil
 }
@@ -199,14 +212,16 @@ func (i *items) next() error {
 	for rows.Next() {
 		var item string
 		var itemCount int
+		var createEpoch int64
 		var lastUpdate int64
 		var lastValue string
-		err = rows.Scan(&itemCount, &lastUpdate, &item, &lastValue)
+		err = rows.Scan(&itemCount, &createEpoch, &lastUpdate, &item, &lastValue)
 		if err != nil {
 			return err
 		}
 		itemID := i.getItemID(item)
 		i.counts[itemID] -= itemCount
+		i.createEpochs[itemID] = createEpoch
 		i.lastUpdates[itemID] = lastUpdate
 		i.lastValues[itemID] = lastValue
 	}
@@ -236,10 +251,11 @@ func (i *items) flush() error {
 			continue
 		}
 		member := i.getMember(itemID)
+		createEpoch := i.getCreateEpoch(itemID)
 		lastUpdate := i.getLastUpdate(itemID)
 		lastValue := i.getLastValue(itemID)
 		if err := i.InsertRow(tableDefs["items"],
-			cnt, lastUpdate, member, lastValue); err != nil {
+			cnt, createEpoch, lastUpdate, member, lastValue); err != nil {
 			return err
 		}
 	}
@@ -256,6 +272,7 @@ func (i *items) DeepCopy() *items {
 		members:       make(map[string]int),
 		memberMap:     make(map[int]string),
 		counts:        make(map[int]int),
+		createEpochs:  make(map[int]int64),
 		lastUpdates:   make(map[int]int64),
 		lastValues:    make(map[int]string),
 		currCounts:    make(map[int]int),
@@ -273,6 +290,10 @@ func (i *items) DeepCopy() *items {
 
 	for k, v := range i.counts {
 		copyItems.counts[k] = v
+	}
+
+	for k, v := range i.createEpochs {
+		copyItems.createEpochs[k] = v
 	}
 
 	for k, v := range i.lastUpdates {

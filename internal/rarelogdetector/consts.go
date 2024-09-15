@@ -15,10 +15,9 @@ const (
 	cMaxRowID            = int64(9223372036854775806)
 	cLogPerLines         = 1000000
 	cDefaultBuffSize     = 10000
-	cCountBorderRate     = 0.01
 	cErrorKeywords       = "failure|failed|error|down|crit"
 	cNFilesToCheckCount  = 5
-	cTermCountBorderRate = 0.01
+	cTermCountBorderRate = 0.001
 	cCountbyScoreLen     = 100
 
 	cAsteriskItemID = -1
