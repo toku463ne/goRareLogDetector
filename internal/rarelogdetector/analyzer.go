@@ -40,6 +40,7 @@ type phraseCnt struct {
 	count     int
 	line      string
 	phrasestr string
+	tokens    []int
 }
 
 type termCntCount struct {
@@ -427,14 +428,21 @@ func (a *Analyzer) Detect(termCountBorderRate float64) ([]phraseCnt, error) {
 	a.initBlocks()
 	a.trans.currYearDay = 0
 
-	if termCountBorderRate > 0 {
-		a.trans.calcCountBorder(termCountBorderRate)
-	}
-
 	logrus.Debug("Starting log analyzing")
 	results, err := a._run(0, false, false, true)
 	if err != nil {
 		return nil, err
+	}
+
+	// in case different termCountBorderRate is specified, rearange phrases again
+	if termCountBorderRate > 0 {
+		a.trans.rearangePhrases(termCountBorderRate)
+	}
+	p := a.trans.phrases
+	for i := range results {
+		phraseID, phraseStr := a.trans.registerPhrase(results[i].tokens, 0, "", false, a.minMatchRate, a.maxMatchRate)
+		results[i].count = p.getCount(phraseID)
+		results[i].phrasestr = phraseStr
 	}
 
 	logrus.Debug("Completed log analyzing")
@@ -519,7 +527,8 @@ func (a *Analyzer) TermCountCountsShow(N int) error {
 	return nil
 }
 
-func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms, registerPT bool, detectMode bool) ([]phraseCnt, error) {
+func (a *Analyzer) _run(targetLinesCnt int,
+	registerPreTerms, registerPT bool, detectMode bool) ([]phraseCnt, error) {
 	var results []phraseCnt
 	linesProcessed := 0
 	registerItems := true
@@ -542,7 +551,7 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms, registerPT bool, d
 			continue
 		}
 
-		cnt, _, phrasestr, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), registerItems,
+		_, tokens, _, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), registerItems,
 			registerPreTerms, registerPT, a.minMatchRate, a.maxMatchRate)
 		if err != nil {
 			return nil, err
@@ -557,11 +566,10 @@ func (a *Analyzer) _run(targetLinesCnt int, registerPreTerms, registerPT bool, d
 
 		if detectMode {
 			if a.trans.match(te) {
-				p := new(phraseCnt)
-				p.count = cnt
-				p.line = te
-				p.phrasestr = phrasestr
-				results = append(results, *p)
+				results = append(results, phraseCnt{
+					tokens: tokens,
+					line:   te,
+				})
 			}
 		}
 

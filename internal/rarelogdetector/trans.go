@@ -624,6 +624,11 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 		return nil
 	}
 
+	t.pt = &phraseTree{
+		count:      0,
+		childNodes: nil,
+	}
+
 	for phraseID, line := range t.phrases.memberMap {
 		cnt := t.phrases.getCount(phraseID)
 		lastUpdate := t.phrases.getLastUpdate(phraseID)
@@ -632,11 +637,13 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 		len := 0
 		words := strings.Split(line, " ")
 		phrasestr := ""
+		tokens := make([]int, 0)
 		for _, term := range words {
 			termID := t.terms.getItemID(term)
 			termCnt := t.terms.getCount(termID)
 			if termCnt >= t.termCountBorder {
 				phrasestr += " " + term
+				tokens = append(tokens, termID)
 				len++
 			} else {
 				phrasestr += " *"
@@ -646,6 +653,7 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 			phrasestr = line
 		}
 		phrasestr = strings.TrimSpace(phrasestr)
+		t.registerPt(tokens)
 		p.register(phrasestr, cnt, lastUpdate, lastValue, false)
 	}
 

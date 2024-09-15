@@ -114,7 +114,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	results, err := a.Detect(0)
+	results, err := a.Detect(0.5)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -124,7 +124,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		t.Errorf("%v", err)
 		return
 	}
-	if err := utils.GetGotExpErr("results[1].count", results[1].count, 4); err != nil {
+	if err := utils.GetGotExpErr("results[1].count", results[0].count, 28); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
