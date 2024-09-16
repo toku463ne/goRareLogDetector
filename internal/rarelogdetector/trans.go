@@ -1,10 +1,12 @@
 package rarelogdetector
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"goRareLogDetector/pkg/utils"
 	"math"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -641,6 +643,7 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 	for phraseID, line := range t.phrases.memberMap {
 		cnt := t.phrases.getCount(phraseID)
 		lastUpdate := t.phrases.getLastUpdate(phraseID)
+		createEpoch := t.phrases.getCreateEpoch(phraseID)
 		lastValue := t.phrases.getLastValue(phraseID)
 
 		len := 0
@@ -663,7 +666,7 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 		}
 		phrasestr = strings.TrimSpace(phrasestr)
 		t.registerPt(tokens)
-		p.register(phrasestr, cnt, lastUpdate, lastUpdate, lastValue, false)
+		p.register(phrasestr, cnt, createEpoch, lastUpdate, lastValue, false)
 	}
 
 	t.phrases = p
@@ -675,11 +678,27 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 	return nil
 }
 
-func (t *trans) outputPhrases(termCountBorderRate float64) error {
+func (t *trans) outputPhrases(termCountBorderRate float64,
+	delim, outfile string) error {
+	var writer *bufio.Writer
+	if delim == "" {
+		delim = ",s"
+	}
+
 	if termCountBorderRate > 0 {
 		if err := t.rearangePhrases(termCountBorderRate); err != nil {
 			return err
 		}
+	}
+
+	if outfile != "" {
+		file, err := os.Create(outfile)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		writer = bufio.NewWriter(file)
 	}
 
 	for phraseID, line := range t.phrases.memberMap {
@@ -692,8 +711,14 @@ func (t *trans) outputPhrases(termCountBorderRate float64) error {
 		lastUpdate := t.phrases.getLastUpdate(phraseID)
 		text := t.phrases.getMember(phraseID)
 
-		fmt.Printf("%d,%d,%d,%s\n", cnt, createEpoch, lastUpdate, text)
-
+		line := fmt.Sprintf("%d%s%d%s%d%s%s\n", cnt, delim, createEpoch, delim, lastUpdate, delim, text)
+		if outfile == "" {
+			print(line)
+		} else {
+			if _, err := writer.WriteString(line); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil

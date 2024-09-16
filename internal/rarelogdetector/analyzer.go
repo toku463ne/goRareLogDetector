@@ -490,7 +490,7 @@ func (a *Analyzer) TopNShow(N, minCnt, days int,
 }
 
 func (a *Analyzer) termCountCounts() []termCntCount {
-	termCounts := a.trans.preTerms.counts
+	termCounts := a.trans.terms.counts
 
 	// Step 1: Count occurrences using a map
 	countMap := make(map[int]int)
@@ -517,6 +517,7 @@ func (a *Analyzer) TermCountCountsShow(N int) error {
 	counts := a.termCountCounts()
 
 	n := 0
+	fmt.Println("termCount,Count")
 	for _, c := range counts {
 		fmt.Printf("%d,%d\n", c.termCount, c.Count)
 		n++
@@ -527,8 +528,8 @@ func (a *Analyzer) TermCountCountsShow(N int) error {
 	return nil
 }
 
-func (a *Analyzer) ShowPhrases(termCountBorderRate float64) error {
-	if err := a.trans.outputPhrases(termCountBorderRate); err != nil {
+func (a *Analyzer) OutputPhrases(termCountBorderRate float64, delim, outfile string) error {
+	if err := a.trans.outputPhrases(termCountBorderRate, delim, outfile); err != nil {
 		return err
 	}
 	return nil

@@ -63,3 +63,17 @@ func Test_real2(t *testing.T) {
 	os.Args = []string{"rarelog", "-d", "/home/ubuntu/logandata/openvpn_data", "-x", "username attempted to change from"}
 	main()
 }
+
+func Test_real_sugcap(t *testing.T) {
+	//conf := "/home/ubuntu/logandata/openvpn.yml"
+	conf := "/home/administrator/tests/sugcap/sugcap.yml"
+	os.Args = []string{"rarelog", "-m", "feed", "-c", conf}
+	main()
+}
+
+func Test_real_sugcap2(t *testing.T) {
+	//conf := "/home/ubuntu/logandata/openvpn.yml"
+	conf := "/home/administrator/tests/sugcap/sugcap.yml"
+	os.Args = []string{"rarelog", "-m", "showPhrases", "-c", conf}
+	main()
+}

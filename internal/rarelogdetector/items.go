@@ -66,6 +66,9 @@ func (i *items) register(item string, addCount int,
 		if lastUpdate > i.lastUpdates[itemID] {
 			i.lastUpdates[itemID] = lastUpdate
 		}
+		if createEpoch < i.createEpochs[itemID] {
+			i.createEpochs[itemID] = createEpoch
+		}
 	} else {
 		i.maxItemID++
 		itemID = i.maxItemID

@@ -43,6 +43,8 @@ var (
 	termCountBorderRate float64
 	showLastText        bool
 	line                string
+	outputFile          string
+	delim               string
 )
 
 type config struct {
@@ -76,6 +78,8 @@ func init() {
 	flag.Float64Var(&termCountBorderRate, "R", 0.0, "Words that have less number than this rate will be ignored")
 	flag.BoolVar(&showLastText, "showLastText", false, "If show the last text in the phrase group instead of the phrase.")
 	flag.StringVar(&line, "line", "", "Log line to analyze")
+	flag.StringVar(&outputFile, "o", "", "Output file when using -m outputPhrases")
+	flag.StringVar(&delim, "delim", "", "Deliminator of CSV file when using -m outputPhrases")
 
 	logFormat = ""
 	timestampLayout = ""
@@ -240,10 +244,10 @@ func run() error {
 		a.TermCountCountsShow(N)
 	case "analyzeLine":
 		a.AnalyzeLine(line)
-	case "showPhrases":
-		a.ShowPhrases(termCountBorderRate)
+	case "outputPhrases":
+		a.OutputPhrases(termCountBorderRate, delim, outputFile)
 	default:
-		err = errors.New("-m: mode must be one of topN|detect|feed")
+		err = errors.New("-m: mode must be one of topN|detect|feed|termCounts|analyzeLine|outputPhrases")
 	}
 	if err != nil {
 		return err
