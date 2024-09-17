@@ -126,13 +126,13 @@ func Test_Items(t *testing.T) {
 
 	maxBlocks := 3
 	//tl, err := newTableLogRecords(dataDir, maxBlocks, maxRowsInBlock)
-	it, err := newItems(dataDir, "items", maxBlocks, 0, false)
+	it, err := newItems(dataDir, "items", maxBlocks, 0, "", false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 	it.DropAll()
-	it, err = newItems(dataDir, "items", maxBlocks, 0, false)
+	it, err = newItems(dataDir, "items", maxBlocks, 0, "", false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -316,7 +316,7 @@ func Test_Items(t *testing.T) {
 
 	it = nil
 
-	it, err = newItems(dataDir, "items", maxBlocks, 0, false)
+	it, err = newItems(dataDir, "items", maxBlocks, 0, "", false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -415,10 +415,10 @@ func Test_ItemsWithDays(t *testing.T) {
 		return
 	}
 
-	daysToKeep := 3
+	daysToKeep := int64(3)
 	maxBlocks := 4
 
-	it, err := newItems(dataDir, "items", maxBlocks, daysToKeep, false)
+	it, err := newItems(dataDir, "items", maxBlocks, daysToKeep, "days", false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return

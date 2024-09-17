@@ -34,7 +34,8 @@ var (
 	timestampLayout     string
 	maxBlocks           int
 	blockSize           int
-	daysToKeep          int
+	retention           int64
+	frequency           string
 	minMatchRate        float64
 	maxMatchRate        float64
 	N                   int
@@ -54,7 +55,8 @@ type config struct {
 	ExcludeStrings  []string `yaml:"excludeString"`
 	LogFormat       string   `yaml:"logFormat"`
 	TimestampLayout string   `yaml:"timestampLayout"`
-	DaysToKeep      int      `yaml:"daysToKeep"`
+	Retention       int64    `yaml:"retention"`
+	Frequency       string   `yaml:"frequency"`
 	MinMatchRate    float64  `yaml:"minMatchRate"`
 	MaxMatchRate    float64  `yaml:"maxMatchRate"`
 }
@@ -74,7 +76,7 @@ func init() {
 	flag.Float64Var(&maxMatchRate, "maxR", 0.0, "Do not check more terms than this rate when grouping lines")
 	flag.IntVar(&N, "N", 0, "Show Top N rare logs in topN mode")
 	flag.IntVar(&M, "M", 0, "Show ony logs appeared M times in topN mode")
-	flag.IntVar(&D, "D", 0, "Recent days to show in topN mode")
+	flag.IntVar(&D, "retention", 0, "Recent days to show in topN mode")
 	flag.Float64Var(&termCountBorderRate, "R", 0.0, "Words that have less number than this rate will be ignored")
 	flag.BoolVar(&showLastText, "showLastText", false, "If show the last text in the phrase group instead of the phrase.")
 	flag.StringVar(&line, "line", "", "Log line to analyze")
@@ -85,7 +87,7 @@ func init() {
 	timestampLayout = ""
 	maxBlocks = 0
 	blockSize = 0
-	daysToKeep = 0
+	retention = 0
 
 	// Parse command line flags
 	//flag.Parse()
@@ -155,7 +157,7 @@ logFormat:
 timestampLayout:
 searchString:
 excludeString:
-daysToKeep:
+retention:
 *
 */
 func loadConfig(path string) error {
@@ -203,8 +205,8 @@ func loadConfig(path string) error {
 	if timestampLayout == "" {
 		timestampLayout = c.TimestampLayout
 	}
-	if daysToKeep == 0 {
-		daysToKeep = c.DaysToKeep
+	if retention == 0 {
+		retention = c.Retention
 	}
 	return nil
 }
@@ -226,7 +228,8 @@ func run() error {
 	} else {
 		a, err = rarelogdetector.NewAnalyzer(dataDir, logPath, logFormat, timestampLayout,
 			searchStrings, excludeStrings,
-			maxBlocks, blockSize, daysToKeep,
+			maxBlocks, blockSize,
+			retention, frequency,
 			minMatchRate, maxMatchRate,
 			readOnly)
 	}

@@ -11,24 +11,27 @@ import (
 
 type items struct {
 	*csvdb.CircuitDB
-	name          string
-	maxItemID     int
-	members       map[string]int
-	memberMap     map[int]string
-	counts        map[int]int
-	createEpochs  map[int]int64
-	lastUpdates   map[int]int64
-	lastUpdate    int64
-	lastValues    map[int]string
-	currCounts    map[int]int
-	currItemCount int
-	totalCount    int
+	name             string
+	maxItemID        int
+	members          map[string]int
+	memberMap        map[int]string
+	counts           map[int]int
+	createEpochs     map[int]int64
+	lastUpdates      map[int]int64
+	lastUpdate       int64
+	lastValues       map[int]string
+	currCounts       map[int]int
+	currUpdates      map[int]int64
+	currCreateEpochs map[int]int64
+	currItemCount    int
+	totalCount       int
 }
 
-func newItems(dataDir, name string, maxBlocks, daysToKeep int, useGzip bool) (*items, error) {
+func newItems(dataDir, name string, maxBlocks int,
+	retention int64, frequency string, useGzip bool) (*items, error) {
 	i := new(items)
 	// Now: maxRowsInBlock=0 TODO: support rotation and change this
-	d, err := csvdb.NewCircuitDB(dataDir, name, tableDefs["items"], maxBlocks, 0, daysToKeep, useGzip)
+	d, err := csvdb.NewCircuitDB(dataDir, name, tableDefs["items"], maxBlocks, 0, retention, frequency, useGzip)
 	if err != nil {
 		return nil, err
 	}
@@ -40,6 +43,8 @@ func newItems(dataDir, name string, maxBlocks, daysToKeep int, useGzip bool) (*i
 	i.currCounts = make(map[int]int, 10000)
 	i.lastUpdates = make(map[int]int64, 10000)
 	i.createEpochs = make(map[int]int64, 10000)
+	i.currUpdates = make(map[int]int64, 10000)
+	i.currCreateEpochs = make(map[int]int64, 10000)
 	i.lastValues = make(map[int]string, 10000)
 	i.maxItemID = 0
 
@@ -69,6 +74,7 @@ func (i *items) register(item string, addCount int,
 		if createEpoch < i.createEpochs[itemID] {
 			i.createEpochs[itemID] = createEpoch
 		}
+
 	} else {
 		i.maxItemID++
 		itemID = i.maxItemID
@@ -76,6 +82,7 @@ func (i *items) register(item string, addCount int,
 		i.memberMap[itemID] = item
 		i.lastUpdates[itemID] = lastUpdate
 		i.createEpochs[itemID] = createEpoch
+
 		if isNew {
 			i.currItemCount++
 		}
@@ -83,6 +90,21 @@ func (i *items) register(item string, addCount int,
 
 	if lastUpdate > i.lastUpdate {
 		i.lastUpdate = lastUpdate
+	}
+
+	if isNew {
+		_, ok = i.currUpdates[itemID]
+		if ok {
+			if lastUpdate > i.currUpdates[itemID] {
+				i.currUpdates[itemID] = lastUpdate
+			}
+			if createEpoch > 0 && createEpoch < i.currCreateEpochs[itemID] {
+				i.currCreateEpochs[itemID] = createEpoch
+			}
+		} else {
+			i.currUpdates[itemID] = lastUpdate
+			i.currCreateEpochs[itemID] = createEpoch
+		}
 	}
 
 	if addCount == 0 {
@@ -153,6 +175,8 @@ func (i *items) getItemID(term string) int {
 
 func (i *items) clearCurrCount() {
 	i.currCounts = make(map[int]int, 10000)
+	i.currUpdates = make(map[int]int64, 10000)
+	i.currCreateEpochs = make(map[int]int64, 10000)
 	i.currItemCount = 0
 }
 
@@ -224,8 +248,14 @@ func (i *items) next() error {
 		}
 		itemID := i.getItemID(item)
 		i.counts[itemID] -= itemCount
-		i.createEpochs[itemID] = createEpoch
-		i.lastUpdates[itemID] = lastUpdate
+		i.currCreateEpochs[itemID] = createEpoch
+		i.currUpdates[itemID] = lastUpdate
+		if lastUpdate > i.lastUpdates[itemID] {
+			i.lastUpdates[itemID] = lastUpdate
+		}
+		if createEpoch > 0 && createEpoch < i.createEpochs[itemID] {
+			i.createEpochs[itemID] = createEpoch
+		}
 		i.lastValues[itemID] = lastValue
 	}
 
@@ -254,8 +284,8 @@ func (i *items) flush() error {
 			continue
 		}
 		member := i.getMember(itemID)
-		createEpoch := i.getCreateEpoch(itemID)
-		lastUpdate := i.getLastUpdate(itemID)
+		createEpoch := i.currCreateEpochs[itemID]
+		lastUpdate := i.currUpdates[itemID]
 		lastValue := i.getLastValue(itemID)
 		if err := i.InsertRow(tableDefs["items"],
 			cnt, createEpoch, lastUpdate, member, lastValue); err != nil {
@@ -270,17 +300,19 @@ func (i *items) flush() error {
 
 func (i *items) DeepCopy() *items {
 	copyItems := &items{
-		name:          i.name,
-		maxItemID:     i.maxItemID,
-		members:       make(map[string]int),
-		memberMap:     make(map[int]string),
-		counts:        make(map[int]int),
-		createEpochs:  make(map[int]int64),
-		lastUpdates:   make(map[int]int64),
-		lastValues:    make(map[int]string),
-		currCounts:    make(map[int]int),
-		currItemCount: i.currItemCount,
-		totalCount:    i.totalCount,
+		name:             i.name,
+		maxItemID:        i.maxItemID,
+		members:          make(map[string]int),
+		memberMap:        make(map[int]string),
+		counts:           make(map[int]int),
+		createEpochs:     make(map[int]int64),
+		lastUpdates:      make(map[int]int64),
+		lastValues:       make(map[int]string),
+		currCounts:       make(map[int]int),
+		currItemCount:    i.currItemCount,
+		currUpdates:      make(map[int]int64),
+		currCreateEpochs: make(map[int]int64),
+		totalCount:       i.totalCount,
 	}
 
 	for k, v := range i.members {
@@ -301,6 +333,14 @@ func (i *items) DeepCopy() *items {
 
 	for k, v := range i.lastUpdates {
 		copyItems.lastUpdates[k] = v
+	}
+
+	for k, v := range i.currUpdates {
+		copyItems.currUpdates[k] = v
+	}
+
+	for k, v := range i.currCreateEpochs {
+		copyItems.currCreateEpochs[k] = v
 	}
 
 	for k, v := range i.lastValues {

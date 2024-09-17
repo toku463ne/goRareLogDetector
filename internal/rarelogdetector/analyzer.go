@@ -20,7 +20,8 @@ type Analyzer struct {
 	timestampLayout string
 	blockSize       int
 	maxBlocks       int
-	daysToKeep      int
+	retention       int64
+	frequency       string
 	configTable     *csvdb.Table
 	lastStatusTable *csvdb.Table
 	trans           *trans
@@ -50,7 +51,8 @@ type termCntCount struct {
 
 func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	searchRegex, exludeRegex []string,
-	maxBlocks, blockSize, daysToKeep int,
+	maxBlocks, blockSize int,
+	retention int64, frequency string,
 	minMatchRate, maxMatchRate float64,
 	readOnly bool) (*Analyzer, error) {
 	a := new(Analyzer)
@@ -58,12 +60,14 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	a.logPath = logPath
 	a.logFormat = logFormat
 	a.timestampLayout = timestampLayout
+	a.retention = retention
+	a.frequency = frequency
 
 	a.setFilters(searchRegex, exludeRegex)
 
 	a.blockSize = blockSize
 	a.maxBlocks = maxBlocks
-	a.daysToKeep = daysToKeep
+	a.retention = retention
 	if minMatchRate == 0 {
 		a.minMatchRate = 0.6
 	} else {
@@ -78,6 +82,10 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 
 	if err := a.open(); err != nil {
 		return nil, err
+	}
+
+	if logPath != "" {
+		a.logPath = logPath
 	}
 
 	return a, nil
@@ -174,22 +182,22 @@ func (a *Analyzer) initBlocks() {
 		return
 	}
 
-	if a.trans == nil || a.trans.maxCountByDay == 0 {
+	if a.trans == nil || a.trans.maxCountByBlock == 0 {
 		return
 	}
 
-	maxCountByDay := a.trans.maxCountByDay
-	daysToKeep := a.daysToKeep
-	if daysToKeep == 0 {
-		daysToKeep = 30
+	maxCountByBlock := a.trans.maxCountByBlock
+	retention := a.retention
+	if retention == 0 {
+		retention = 30
 	}
 
 	if a.blockSize == 0 {
-		if maxCountByDay < 3000 {
+		if maxCountByBlock < 3000 {
 			a.blockSize = 10000
-		} else if maxCountByDay < 30000 {
+		} else if maxCountByBlock < 30000 {
 			a.blockSize = 100000
-		} else if maxCountByDay < 300000 {
+		} else if maxCountByBlock < 300000 {
 			a.blockSize = 100000
 		} else {
 			a.blockSize = 1000000
@@ -197,8 +205,8 @@ func (a *Analyzer) initBlocks() {
 	}
 
 	if a.maxBlocks == 0 {
-		n := int(math.Ceil(float64(a.trans.maxCountByDay) / float64(a.blockSize)))
-		a.maxBlocks = n * a.daysToKeep
+		n := int(math.Ceil(float64(a.trans.maxCountByBlock) / float64(a.blockSize)))
+		a.maxBlocks = n * int(a.retention)
 	}
 	a.trans.setBlockSize(a.blockSize)
 	a.trans.setMaxBlocks(a.maxBlocks)
@@ -213,7 +221,8 @@ func (a *Analyzer) init() error {
 	}
 
 	trans, err := newTrans(a.dataDir, a.logFormat, a.timestampLayout,
-		a.maxBlocks, a.blockSize, a.daysToKeep,
+		a.maxBlocks, a.blockSize,
+		a.retention, a.frequency,
 		a.filterRe, a.xFilterRe,
 		true, a.readOnly)
 	if err != nil {
@@ -390,7 +399,7 @@ func (a *Analyzer) Feed(targetLinesCnt int) error {
 	}
 
 	a.initBlocks()
-	a.trans.currYearDay = 0
+	a.trans.currRetentionPos = 0
 
 	logrus.Debug("Starting phrase tree registration")
 	if _, err := a._run(0, false, true, false); err != nil {
@@ -399,7 +408,7 @@ func (a *Analyzer) Feed(targetLinesCnt int) error {
 	logrus.Debug("Completed phrase tree registration")
 
 	a.initBlocks()
-	a.trans.currYearDay = 0
+	a.trans.currRetentionPos = 0
 
 	logrus.Infof("Analyzing log")
 	if _, err := a._run(targetLinesCnt, false, false, false); err != nil {
@@ -417,7 +426,7 @@ func (a *Analyzer) Detect(termCountBorderRate float64) ([]phraseCnt, error) {
 	logrus.Debug("Completed term registration")
 
 	a.initBlocks()
-	a.trans.currYearDay = 0
+	a.trans.currRetentionPos = 0
 
 	logrus.Debug("Starting phrase tree registration")
 	if _, err := a._run(0, false, true, false); err != nil {
@@ -426,7 +435,7 @@ func (a *Analyzer) Detect(termCountBorderRate float64) ([]phraseCnt, error) {
 	logrus.Debug("Completed phrase tree registration")
 
 	a.initBlocks()
-	a.trans.currYearDay = 0
+	a.trans.currRetentionPos = 0
 
 	logrus.Debug("Starting log analyzing")
 	results, err := a._run(0, false, false, true)

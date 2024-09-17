@@ -33,10 +33,12 @@ type trans struct {
 	latestUpdate      int64
 	filterRe          []*regexp.Regexp
 	xFilterRe         []*regexp.Regexp
-	currYearDay       int
-	countByDay        int
-	maxCountByDay     int
+	currRetentionPos  int
+	countByBlock      int
+	maxCountByBlock   int
 	termCountBorder   int
+	retention         int64
+	frequency         string
 	pt                *phraseTree
 }
 
@@ -54,20 +56,21 @@ type phraseTree struct {
 }
 
 func newTrans(dataDir, logFormat, timestampLayout string,
-	maxBlocks, blockSize, daysToKeep int,
+	maxBlocks, blockSize int,
+	retention int64, frequency string,
 	filterRe, xFilterRe []*regexp.Regexp,
 	useGzip, readOnly bool) (*trans, error) {
 	t := new(trans)
-	te, err := newItems(dataDir, "terms", maxBlocks, daysToKeep, useGzip)
+	te, err := newItems(dataDir, "terms", maxBlocks, retention, frequency, useGzip)
 	if err != nil {
 		return nil, err
 	}
-	pte, err := newItems("", "terms", 0, daysToKeep, false)
+	pte, err := newItems("", "terms", 0, retention, frequency, false)
 	if err != nil {
 		return nil, err
 	}
 
-	p, err := newItems(dataDir, "phrases", maxBlocks, daysToKeep, useGzip)
+	p, err := newItems(dataDir, "phrases", maxBlocks, retention, frequency, useGzip)
 	if err != nil {
 		return nil, err
 	}
@@ -87,8 +90,10 @@ func newTrans(dataDir, logFormat, timestampLayout string,
 	t.phraseScores = make(map[int]float64, 10000)
 	t.filterRe = filterRe
 	t.xFilterRe = xFilterRe
-	t.countByDay = 0
-	t.maxCountByDay = 0
+	t.countByBlock = 0
+	t.maxCountByBlock = 0
+	t.retention = retention
+	t.frequency = frequency
 
 	t.pt = &phraseTree{
 		count:      0,
@@ -361,12 +366,17 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 	}
 	minCnt, pos := t.searchPt(tokens, minLen, maxLen)
 
+	lastToken := 0
 	if pos >= minLen {
 		for i, count := range counts {
 			if count >= minCnt {
 				phrase = append(phrase, tokens[i])
+				lastToken = tokens[i]
 			} else {
-				phrase = append(phrase, cAsteriskItemID)
+				if lastToken != cAsteriskItemID {
+					phrase = append(phrase, cAsteriskItemID)
+					lastToken = cAsteriskItemID
+				}
 			}
 		}
 	} else {
@@ -456,14 +466,19 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 
 	orgLine := line
 	phraseCnt := -1
-	yearDay := 0
+	retentionPos := 0
 	lastUpdate := fileEpoch
 	if t.timestampPos >= 0 || t.messagePos >= 0 {
 		match := t.logFormatRe.FindStringSubmatch(line)
 		if len(match) > 0 {
 			if t.timestampPos >= 0 && t.timestampLayout != "" && len(match) > t.timestampPos {
 				lastdt, err = utils.Str2date(t.timestampLayout, match[t.timestampPos])
-				yearDay = lastdt.Year()*1000 + lastdt.YearDay()
+				switch t.frequency {
+				case "hour":
+					retentionPos = lastdt.Year()*100000 + lastdt.YearDay()*100 + lastdt.Hour()
+				default:
+					retentionPos = lastdt.Year()*1000 + lastdt.YearDay()
+				}
 			}
 			if err == nil {
 				lastUpdate = lastdt.Unix()
@@ -478,7 +493,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 
 	if !registerPreTerms && !registerPT {
 		if t.phrases.DataDir != "" && !t.readOnly && t.blockSize > 0 {
-			if t.phrases.currItemCount >= t.blockSize || (t.currYearDay > 0 && yearDay > t.currYearDay) {
+			if t.phrases.currItemCount >= t.blockSize || (t.currRetentionPos > 0 && retentionPos > t.currRetentionPos) {
 				if err := t.next(); err != nil {
 					return -1, nil, "", err
 				}
@@ -493,7 +508,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 		return -1, nil, "", err
 	}
 
-	t.countByDay++
+	t.countByBlock++
 
 	if registerPreTerms {
 		t.totalLines++
@@ -512,14 +527,14 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 	}
 
 	if registerPreTerms {
-		if t.currYearDay > 0 && yearDay > t.currYearDay {
-			if t.countByDay > t.maxCountByDay {
-				t.maxCountByDay = t.countByDay
+		if t.currRetentionPos > 0 && retentionPos > t.currRetentionPos {
+			if t.countByBlock > t.maxCountByBlock {
+				t.maxCountByBlock = t.countByBlock
 			}
-			t.countByDay = 0
+			t.countByBlock = 0
 		}
 	}
-	t.currYearDay = yearDay
+	t.currRetentionPos = retentionPos
 
 	return phraseCnt, tokens, phrasestr, nil
 }
@@ -623,7 +638,7 @@ func (t *trans) analyzeLine(line string) error {
 }
 
 func (t *trans) rearangePhrases(termCountBorderRate float64) error {
-	p, err := newItems("", "phrase2", 0, 0, false)
+	p, err := newItems("", "phrase2", 0, 0, "", false)
 	if err != nil {
 		return err
 	}
@@ -646,22 +661,27 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 		createEpoch := t.phrases.getCreateEpoch(phraseID)
 		lastValue := t.phrases.getLastValue(phraseID)
 
-		len := 0
+		plen := 0
 		words := strings.Split(line, " ")
 		phrasestr := ""
 		tokens := make([]int, 0)
+		lastTermID := 0
 		for _, term := range words {
 			termID := t.terms.getItemID(term)
 			termCnt := t.terms.getCount(termID)
-			if termCnt >= t.termCountBorder {
+			if termCnt >= t.termCountBorder && lastTermID != cAsteriskItemID {
 				phrasestr += " " + term
 				tokens = append(tokens, termID)
-				len++
+				lastTermID = termID
+				plen++
 			} else {
-				phrasestr += " *"
+				if lastTermID != cAsteriskItemID {
+					phrasestr += " *"
+				}
+				lastTermID = cAsteriskItemID
 			}
 		}
-		if len < 3 {
+		if plen < 3 {
 			phrasestr = line
 		}
 		phrasestr = strings.TrimSpace(phrasestr)
@@ -718,6 +738,19 @@ func (t *trans) outputPhrases(termCountBorderRate float64,
 			if _, err := writer.WriteString(line); err != nil {
 				return err
 			}
+		}
+	}
+
+	return nil
+}
+
+func (t *trans) outputPhrasesHistory(
+	termCountBorderRate float64, biggestN int,
+	delim, outfile string) error {
+
+	if termCountBorderRate > 0 {
+		if err := t.rearangePhrases(termCountBorderRate); err != nil {
+			return err
 		}
 	}
 

@@ -3,6 +3,8 @@ package rarelogdetector
 import (
 	"fmt"
 	"goRareLogDetector/pkg/utils"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -19,7 +21,7 @@ func Test_Analyzer_Run(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, 0, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -70,7 +72,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, 0, false)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -108,7 +110,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, 0, true)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -147,7 +149,7 @@ func Test_Analyzer_Run2(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, 0.8, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0.8, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -174,7 +176,7 @@ func Test_Analyzer_Run2(t *testing.T) {
 		return
 	}
 
-	phraseID := a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 * *")
+	phraseID := a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 *")
 	phraseCnt := a.trans.phrases.getCount(phraseID)
 	if err := utils.GetGotExpErr("phrase count", phraseCnt, 20); err != nil {
 		t.Errorf("%v", err)
@@ -195,7 +197,7 @@ func Test_Analyzer_TopN(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, 0, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -242,7 +244,7 @@ func Test_Analyzer_TopN(t *testing.T) {
 
 	a.Close()
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, 0, 0, false)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -276,7 +278,7 @@ func Test_Analyzer_YearDay(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 0, 0, 5, 0, 0, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 0, 0, 5, "", 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -299,6 +301,100 @@ func Test_Analyzer_YearDay(t *testing.T) {
 
 	blockCount := a.trans.phrases.CountFromStatusTable(nil)
 	if err := utils.GetGotExpErr("after feed: block count", blockCount, 5); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+}
+
+func Test_Analyzer_Hourly(t *testing.T) {
+	testDir, err := utils.InitTestDir("Test_Analyzer_Hourly")
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	logPath := "../../test/data/rarelogdetector/analyzer/hourly.log*"
+	logFormat := `^(?P<timestamp>\d+\-\d+\-\d+ \d+:\d+:\d+)\ (?P<message>.+)$`
+	layout := "2006-07-02 15:04:05"
+	dataDir := testDir + "/data"
+
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 10, "hour", 0, 0, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if err := a.Feed(0); err != nil {
+		t.Errorf("%v", err)
+		return
+	} else {
+		if err := utils.GetGotExpErr("lines processed", a.linesProcessed, 8); err != nil {
+			t.Errorf("%v", err)
+			return
+		}
+	}
+
+	csvpath := fmt.Sprintf("%s/phrases/phrases/BLK0000000000.csv.gz", dataDir)
+	ta, err := utils.ReadColFromCsv(csvpath)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("line numbers", len(ta), 2); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	var crt1, upd1 string
+	for _, record := range ta {
+		if strings.Contains(record[3], "grp1a") {
+			cnt, _ := strconv.Atoi(record[0])
+			if err := utils.GetGotExpErr("group numbers", cnt, 2); err != nil {
+				t.Errorf("%v", err)
+				return
+			}
+			crt1 = record[1]
+			upd1 = record[2]
+			break
+		}
+	}
+	if err := utils.GetGotExpErr("created < updated", crt1 < upd1, true); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	csvpath = fmt.Sprintf("%s/phrases/phrases/BLK0000000001.csv.gz", dataDir)
+	ta, err = utils.ReadColFromCsv(csvpath)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	var crt2, upd2 string
+	for _, record := range ta {
+		if strings.Contains(record[3], "grp1a") {
+			crt2 = record[1]
+			upd2 = record[2]
+			break
+		}
+	}
+	if err := utils.GetGotExpErr("created < updated", crt2 < upd2, true); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("updated1 <= created2", upd1 <= crt2, true); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	p := a.trans.phrases
+	phraseID1 := p.getItemID("grp1a grp2a grp3a grp4a grp5a *")
+	crt := p.getCreateEpoch(phraseID1)
+	upd := p.getLastUpdate(phraseID1)
+	if err := utils.GetGotExpErr("created == created1", fmt.Sprint(crt), crt1); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("updated == updated2", fmt.Sprint(upd), upd2); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
