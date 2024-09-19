@@ -46,6 +46,7 @@ var (
 	line                string
 	outputFile          string
 	delim               string
+	biggestN            int
 )
 
 type config struct {
@@ -69,9 +70,10 @@ func init() {
 	flag.BoolVar(&readOnly, "readonly", false, "Read only mode. Do not update data directory.")
 	flag.StringVar(&dataDir, "d", "", "Path to the data directory")
 	flag.StringVar(&logPath, "f", "", "Log file")
+	flag.StringVar(&frequency, "frequency", "day", "Frequency to rotate logs. day|hour")
 	flag.StringVar(&searchString, "s", "", "Search string")
 	flag.StringVar(&excludeString, "x", "", "Exclude string")
-	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed|termCounts|analyzeLine|showPhrases")
+	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed|termCounts|analyzeLine|outputPhrases|outputPhrasesHistory")
 	flag.Float64Var(&minMatchRate, "minR", 0.6, "It is considered 2 log lines 'match', if more than matchRate number of terms in a log line matches.")
 	flag.Float64Var(&maxMatchRate, "maxR", 0.0, "Do not check more terms than this rate when grouping lines")
 	flag.IntVar(&N, "N", 0, "Show Top N rare logs in topN mode")
@@ -80,8 +82,9 @@ func init() {
 	flag.Float64Var(&termCountBorderRate, "R", 0.0, "Words that have less number than this rate will be ignored")
 	flag.BoolVar(&showLastText, "showLastText", false, "If show the last text in the phrase group instead of the phrase.")
 	flag.StringVar(&line, "line", "", "Log line to analyze")
-	flag.StringVar(&outputFile, "o", "", "Output file when using -m outputPhrases")
-	flag.StringVar(&delim, "delim", "", "Deliminator of CSV file when using -m outputPhrases")
+	flag.StringVar(&outputFile, "o", "", "Output file when using -m outputPhrases|outputPhrasesHistory")
+	flag.StringVar(&delim, "delim", "", "Deliminator of CSV file when using -m outputPhrases|outputPhrasesHistory")
+	flag.IntVar(&biggestN, "biggestN", 100, "Top N biggest groups when -m outputPhrases|outputPhrasesHistory")
 
 	logFormat = ""
 	timestampLayout = ""
@@ -249,6 +252,8 @@ func run() error {
 		a.AnalyzeLine(line)
 	case "outputPhrases":
 		a.OutputPhrases(termCountBorderRate, delim, outputFile)
+	case "outputPhrasesHistory":
+		a.OutputPhrasesHistory(termCountBorderRate, biggestN, delim, outputFile)
 	default:
 		err = errors.New("-m: mode must be one of topN|detect|feed|termCounts|analyzeLine|outputPhrases")
 	}
