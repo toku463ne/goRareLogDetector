@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/csv"
 	"fmt"
 	"io"
 	"math"
@@ -370,4 +371,59 @@ func NextDivisibleByN(i, n int) int {
 		return i
 	}
 	return ((i / n) + 1) * 10000
+}
+
+func GetUnitsecs(frequency string) int64 {
+	unitsecs := 3600 * 24
+	switch frequency {
+	case "day":
+		unitsecs = 3600 * 24
+	case "hour":
+		unitsecs = 3600
+	case "minute":
+		unitsecs = 60
+	default:
+		unitsecs = 3600 * 24
+	}
+	return int64(unitsecs)
+}
+
+func GetDatetimeFormat(frequency string) string {
+	format := "2006-01-02 15:04:05"
+	switch frequency {
+	case "day":
+		format = "2006-01-02"
+	case "hour":
+		format = "2006-01-02 15"
+	case "minute":
+		format = "2006-01-02 15:04"
+	}
+	return format
+}
+
+func ReadCsv(csfvile string) ([]string, [][]string, error) {
+	file, err := os.Open(csfvile)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	// Read the header line
+	header, err := reader.Read()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var records [][]string
+
+	for {
+		line, err := reader.Read()
+		if err != nil {
+			break // EOF or error
+		}
+		records = append(records, line)
+	}
+
+	return header, records, nil
 }

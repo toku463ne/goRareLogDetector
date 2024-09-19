@@ -399,4 +399,60 @@ func Test_Analyzer_Hourly(t *testing.T) {
 		return
 	}
 
+	// OutputPhrases test
+	if err := a.OutputPhrases(0.5, ",", testDir+"/phrases.csv"); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	header, records, err := utils.ReadCsv(testDir + "/phrases.csv")
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("len(header)", len(header), 4); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("len(records)", len(records), 2); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("records[0][0]", records[0][0], "2024-01-15 00:00:00"); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("records[0][1]", records[0][2], "4"); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	// OutputPhrasesHistory test
+	if err := a.OutputPhrasesHistory(0.5, 10, ",", testDir+"/phrasehist.csv"); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	header, records, err = utils.ReadCsv(testDir + "/phrasehist.csv")
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("len(header)", len(header), 3); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("len(records)", len(records), 2); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("records[0][0]", records[0][0], "2024-01-15 00"); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("records[0][1]", records[0][1], "2"); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
 }

@@ -68,16 +68,7 @@ func NewCircuitDB(rootDir, name string, columns []string,
 
 	cdb.CsvDB = db
 
-	switch frequency {
-	case "day":
-		cdb.unitsecs = 3600 * 24
-	case "hour":
-		cdb.unitsecs = 3600
-	case "minute":
-		cdb.unitsecs = 60
-	default:
-		cdb.unitsecs = 3600 * 24
-	}
+	cdb.unitsecs = utils.GetUnitsecs(frequency)
 
 	t, err := cdb.GetBlockTable(cdb.blockNo)
 	if err != nil {

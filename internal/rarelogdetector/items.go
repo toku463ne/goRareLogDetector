@@ -366,32 +366,30 @@ func (i *items) getCountBorder(rate float64) int {
 	return int(math.Ceil(float64(maxCnt) * rate))
 }
 
-func (i *items) OLDgetCountBorder(rate float64) int {
-	// Convert the map to a slice of key-value pairs
-	var sortedCounts []int
-	for _, v := range i.counts {
-		sortedCounts = append(sortedCounts, v)
+func (i *items) biggestNItems(N int) []int {
+	// Create a slice of key-value pairs
+	type kv struct {
+		ItemID int
+		Count  int
 	}
 
-	// Sort the slice by values in ascending order
-	sort.Slice(sortedCounts, func(i, j int) bool {
-		return sortedCounts[i] < sortedCounts[j]
+	counts := i.counts
+
+	var kvs []kv
+	for k, v := range counts {
+		kvs = append(kvs, kv{k, v})
+	}
+
+	// Sort the slice by Count in descending order
+	sort.Slice(kvs, func(i, j int) bool {
+		return kvs[i].Count > kvs[j].Count
 	})
 
-	totalCount := len(i.counts)
-
-	// Find the deviation border for the given percentage
-	targetCount := int(math.Ceil(float64(totalCount) * rate))
-	cumulativeCount := 0
-	countBorder := 0
-
-	for _, v := range sortedCounts {
-		cumulativeCount++
-		countBorder = v
-		if cumulativeCount >= targetCount {
-			break
-		}
+	// Extract the top N itemIDs
+	var topN []int
+	for i := 0; i < N && i < len(kvs); i++ {
+		topN = append(topN, kvs[i].ItemID)
 	}
 
-	return countBorder
+	return topN
 }

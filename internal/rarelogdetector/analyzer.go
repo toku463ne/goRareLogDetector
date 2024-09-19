@@ -544,6 +544,15 @@ func (a *Analyzer) OutputPhrases(termCountBorderRate float64, delim, outfile str
 	return nil
 }
 
+func (a *Analyzer) OutputPhrasesHistory(termCountBorderRate float64, biggestN int,
+	delim, outfile string) error {
+	if err := a.trans.outputPhrasesHistory(termCountBorderRate, biggestN,
+		delim, outfile); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (a *Analyzer) _run(targetLinesCnt int,
 	registerPreTerms, registerPT bool, detectMode bool) ([]phraseCnt, error) {
 	var results []phraseCnt

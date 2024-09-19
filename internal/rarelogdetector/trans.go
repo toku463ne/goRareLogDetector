@@ -1,7 +1,7 @@
 package rarelogdetector
 
 import (
-	"bufio"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"goRareLogDetector/pkg/utils"
@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -17,6 +18,7 @@ type trans struct {
 	terms             *items
 	preTerms          *items
 	phrases           *items
+	orgPhrases        *items
 	phraseScores      map[int]float64
 	replacer          *strings.Replacer
 	logFormatRe       *regexp.Regexp
@@ -286,6 +288,9 @@ func (t *trans) registerPt(tokens []int) {
 func (t *trans) searchPt(tokens []int, minLen, maxLen int) (int, int) {
 	pt := t.pt
 	ok := false
+	if minLen == 0 {
+		minLen = 3
+	}
 	_, sortedTerms, sortedCounts := t.sortTokensByCount(tokens)
 	for i, termID := range sortedTerms {
 		pt, ok = pt.childNodes[termID]
@@ -297,6 +302,9 @@ func (t *trans) searchPt(tokens []int, minLen, maxLen int) (int, int) {
 		}
 		if pt.count <= 1 {
 			if i+1 > minLen {
+				if i == 0 {
+					return 0, 0
+				}
 				return sortedCounts[i-1], i
 			}
 		}
@@ -361,7 +369,9 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 	maxLen := 0
 	minLen := 3
 	if n > 3 {
-		minLen = int(math.Floor(float64(n) * minMatchRate))
+		if minMatchRate > 0 {
+			minLen = int(math.Floor(float64(n) * minMatchRate))
+		}
 		maxLen = int(math.Floor(float64(n) * maxMatchRate))
 	}
 	minCnt, pos := t.searchPt(tokens, minLen, maxLen)
@@ -441,7 +451,7 @@ func (t *trans) toTermList(line string,
 		if registerItem {
 			addCnt = 1
 		}
-		if len(word) > 2 || word == " " {
+		if len(word) > 2 || word == " " || word == "*" {
 			if utils.IsInt(word) && len(word) > cMaxNumDigits {
 				continue
 			}
@@ -689,6 +699,7 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 		p.register(phrasestr, cnt, createEpoch, lastUpdate, lastValue, false)
 	}
 
+	t.orgPhrases = t.phrases
 	t.phrases = p
 
 	if err := t.calcPhrasesScore(); err != nil {
@@ -700,10 +711,6 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 
 func (t *trans) outputPhrases(termCountBorderRate float64,
 	delim, outfile string) error {
-	var writer *bufio.Writer
-	if delim == "" {
-		delim = ",s"
-	}
 
 	if termCountBorderRate > 0 {
 		if err := t.rearangePhrases(termCountBorderRate); err != nil {
@@ -711,33 +718,56 @@ func (t *trans) outputPhrases(termCountBorderRate float64,
 		}
 	}
 
-	if outfile != "" {
+	var writer *csv.Writer
+	if outfile == "" {
+		writer = csv.NewWriter(os.Stdout)
+	} else {
 		file, err := os.Create(outfile)
 		if err != nil {
-			return err
+			return fmt.Errorf("error creating file: %w", err)
 		}
 		defer file.Close()
+		writer = csv.NewWriter(file)
+	}
+	if delim == "" {
+		delim = ","
+	}
+	writer.Comma = rune(delim[0])
+	defer writer.Flush()
 
-		writer = bufio.NewWriter(file)
+	// Add the header row
+	header := []string{"Created", "Updated", "Count", "Member"}
+	if outfile == "" {
+		// Print header to stdout
+		fmt.Printf("%-15s %-15s %-10s %-30s\n", header[0], header[1], header[2], header[3])
+		fmt.Printf("%-15s %-15s %-10s %-30s\n",
+			strings.Repeat("-", 15),
+			strings.Repeat("-", 15),
+			strings.Repeat("-", 10),
+			strings.Repeat("-", 30))
+	} else {
+		writer.Write(header)
 	}
 
+	format := "2006-01-02 15:04:05"
 	for phraseID, line := range t.phrases.memberMap {
 		if !t.match(line) {
 			continue
 		}
 
-		cnt := t.phrases.getCount(phraseID)
-		createEpoch := t.phrases.getCreateEpoch(phraseID)
-		lastUpdate := t.phrases.getLastUpdate(phraseID)
-		text := t.phrases.getMember(phraseID)
+		var row []string
 
-		line := fmt.Sprintf("%d%s%d%s%d%s%s\n", cnt, delim, createEpoch, delim, lastUpdate, delim, text)
+		//time.Unix(ep, 0).Format(format)
+		row = append(row, time.Unix(t.phrases.getCreateEpoch(phraseID), 0).Format(format))
+		row = append(row, time.Unix(t.phrases.getLastUpdate(phraseID), 0).Format(format))
+		row = append(row, strconv.Itoa(int(t.phrases.getCount(phraseID))))
+		row = append(row, t.phrases.getMember(phraseID))
+
 		if outfile == "" {
-			print(line)
+			// Pretty print each row to stdout
+			fmt.Printf("%-15s %-15s %-10s %-30s\n", row[0], row[1], row[2], row[3])
 		} else {
-			if _, err := writer.WriteString(line); err != nil {
-				return err
-			}
+			writer.Write(row)
 		}
 	}
 
@@ -748,9 +778,125 @@ func (t *trans) outputPhrasesHistory(
 	termCountBorderRate float64, biggestN int,
 	delim, outfile string) error {
 
+	unitsecs := utils.GetUnitsecs(t.frequency)
+	format := utils.GetDatetimeFormat(t.frequency)
+
 	if termCountBorderRate > 0 {
 		if err := t.rearangePhrases(termCountBorderRate); err != nil {
 			return err
+		}
+	}
+
+	var p *items
+	if t.orgPhrases != nil {
+		p = t.orgPhrases
+	} else {
+		p = t.phrases
+	}
+
+	phraseRanks := p.biggestNItems(biggestN)
+	attrs := make(map[int]map[int64]int, len(phraseRanks))
+
+	rows, err := p.SelectRows(nil, nil, tableDefs["items"])
+	if err != nil {
+		return err
+	}
+	if rows == nil {
+		return nil
+	}
+
+	minTime := int64(0)
+	maxTime := int64(0)
+	first := true
+	for rows.Next() {
+		var item string
+		var itemCount int
+		var createEpoch int64
+		var lastUpdate int64
+		var lastValue string
+		err = rows.Scan(&itemCount, &createEpoch, &lastUpdate, &item, &lastValue)
+		if err != nil {
+			return err
+		}
+		tokens, err := t.toTermList(item, lastUpdate, false, false)
+		if err != nil {
+			return err
+		}
+		phraseID, _ := t.registerPhrase(tokens, lastUpdate, "", false, 0, 0)
+		maxTime = createEpoch / unitsecs * unitsecs
+		_, ok := attrs[phraseID]
+		if !ok {
+			attrs[phraseID] = make(map[int64]int, 0)
+		}
+		attrs[phraseID][maxTime] = itemCount
+		if first {
+			minTime = maxTime
+			first = false
+		}
+	}
+
+	var writer *csv.Writer
+	if outfile == "" {
+		writer = csv.NewWriter(os.Stdout)
+	} else {
+		file, err := os.Create(outfile)
+		if err != nil {
+			return fmt.Errorf("error creating file: %w", err)
+		}
+		defer file.Close()
+		writer = csv.NewWriter(file)
+	}
+	if delim == "" {
+		delim = ","
+	}
+	writer.Comma = rune(delim[0])
+	defer writer.Flush()
+
+	// Pretty print header (adjust for pretty output to stdout)
+	if outfile == "" {
+		fmt.Printf("%-20s", "time")
+		for _, phraseID := range phraseRanks {
+			fmt.Printf("%-15s", strconv.Itoa(phraseID)+".count")
+		}
+		fmt.Println()
+	} else {
+		// Write CSV header for file output
+		header := []string{"time"}
+		for _, phraseID := range phraseRanks {
+			header = append(header, strconv.Itoa(phraseID)+".count")
+		}
+		writer.Write(header)
+	}
+
+	ep := minTime
+	if outfile == "" {
+		for ep <= maxTime {
+			row := []string{time.Unix(ep, 0).Format(format)}
+			fmt.Printf("%-20s", row[0])
+			for _, phraseID := range phraseRanks {
+				count, ok := attrs[phraseID][ep]
+				if ok {
+					fmt.Printf("%-15s", strconv.Itoa(count))
+				} else {
+					fmt.Printf("%-15s", "0")
+				}
+			}
+			fmt.Print("\n")
+			ep += unitsecs
+		}
+	} else {
+		for ep <= maxTime {
+			row := []string{time.Unix(ep, 0).Format(format)}
+			for _, phraseID := range phraseRanks {
+				count, ok := attrs[phraseID][ep]
+				if ok {
+					row = append(row, strconv.Itoa(count))
+				} else {
+					row = append(row, "0")
+				}
+			}
+			writer.Write(row)
+			ep += unitsecs
 		}
 	}
 
