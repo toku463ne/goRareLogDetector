@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -73,7 +75,7 @@ func init() {
 	flag.StringVar(&frequency, "frequency", "day", "Frequency to rotate logs. day|hour")
 	flag.StringVar(&searchString, "s", "", "Search string")
 	flag.StringVar(&excludeString, "x", "", "Exclude string")
-	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed|termCounts|analyzeLine|outputPhrases|outputPhrasesHistory")
+	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed|clean|termCounts|analyzeLine|outputPhrases|outputPhrasesHistory")
 	flag.Float64Var(&minMatchRate, "minR", 0.6, "It is considered 2 log lines 'match', if more than matchRate number of terms in a log line matches.")
 	flag.Float64Var(&maxMatchRate, "maxR", 0.0, "Do not check more terms than this rate when grouping lines")
 	flag.IntVar(&N, "N", 0, "Show Top N rare logs in topN mode")
@@ -136,6 +138,10 @@ func main() {
 	if mode == "" {
 		mode = "topN"
 	}
+	if mode == "clean" {
+		clean()
+		return
+	}
 	if N == 0 {
 		N = 10
 	}
@@ -143,7 +149,6 @@ func main() {
 		M = 1
 	}
 
-	// Start your application logic
 	if err := run(); err != nil {
 		logrus.WithError(err).Fatal("Application encountered an error")
 	}
@@ -214,6 +219,37 @@ func loadConfig(path string) error {
 	return nil
 }
 
+func clean() {
+	// Check if the directory exists
+	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
+		fmt.Printf("Directory '%s' does not exist.\n", dataDir)
+		return
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("Are you sure you want to remove the directory '%s'? (y/N): ", dataDir)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Println("Error reading input:", err)
+		return
+	}
+
+	response = strings.TrimSpace(response)
+	if strings.ToLower(response) != "y" {
+		fmt.Println("Directory removal canceled.")
+		return
+	}
+
+	// Remove the directory
+	err = os.RemoveAll(dataDir)
+	if err != nil {
+		fmt.Printf("Failed to remove directory '%s': %v\n", dataDir, err)
+		return
+	}
+
+	fmt.Printf("Directory '%s' removed successfully.\n", dataDir)
+}
+
 func run() error {
 	logrus.Debug("Starting application")
 	var err error
@@ -255,7 +291,7 @@ func run() error {
 	case "outputPhrasesHistory":
 		a.OutputPhrasesHistory(termCountBorderRate, biggestN, delim, outputFile)
 	default:
-		err = errors.New("-m: mode must be one of topN|detect|feed|termCounts|analyzeLine|outputPhrases")
+		err = errors.New("-m: mode must be one of topN|detect|feed|termCounts|analyzeLine|outputPhrases|clean")
 	}
 	if err != nil {
 		return err
