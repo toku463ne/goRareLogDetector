@@ -42,7 +42,6 @@ var (
 	maxMatchRate        float64
 	N                   int
 	M                   int
-	D                   int
 	termCountBorderRate float64
 	showLastText        bool
 	line                string
@@ -72,7 +71,7 @@ func init() {
 	flag.BoolVar(&readOnly, "readonly", false, "Read only mode. Do not update data directory.")
 	flag.StringVar(&dataDir, "d", "", "Path to the data directory")
 	flag.StringVar(&logPath, "f", "", "Log file")
-	flag.StringVar(&frequency, "frequency", "day", "Frequency to rotate logs. day|hour")
+	flag.StringVar(&frequency, "frequency", "", "Frequency to rotate logs. day|hour")
 	flag.StringVar(&searchString, "s", "", "Search string")
 	flag.StringVar(&excludeString, "x", "", "Exclude string")
 	flag.StringVar(&mode, "m", "", "Run mode: topN|detect|feed|clean|termCounts|analyzeLine|outputPhrases|outputPhrasesHistory")
@@ -80,7 +79,7 @@ func init() {
 	flag.Float64Var(&maxMatchRate, "maxR", 0.0, "Do not check more terms than this rate when grouping lines")
 	flag.IntVar(&N, "N", 0, "Show Top N rare logs in topN mode")
 	flag.IntVar(&M, "M", 0, "Show ony logs appeared M times in topN mode")
-	flag.IntVar(&D, "retention", 0, "Recent days to show in topN mode")
+	flag.Int64Var(&retention, "retention", 0, "Retention in the frequency to show")
 	flag.Float64Var(&termCountBorderRate, "R", 0.0, "Words that have less number than this rate will be ignored")
 	flag.BoolVar(&showLastText, "showLastText", false, "If show the last text in the phrase group instead of the phrase.")
 	flag.StringVar(&line, "line", "", "Log line to analyze")
@@ -216,6 +215,9 @@ func loadConfig(path string) error {
 	if retention == 0 {
 		retention = c.Retention
 	}
+	if frequency == "" {
+		frequency = c.Frequency
+	}
 	return nil
 }
 
@@ -281,7 +283,7 @@ func run() error {
 	case "detect":
 		err = a.DetectAndShow(M, termCountBorderRate)
 	case "topN":
-		err = a.TopNShow(N, M, D, showLastText, termCountBorderRate)
+		err = a.TopNShow(N, M, int(retention), showLastText, termCountBorderRate)
 	case "termCounts":
 		a.TermCountCountsShow(N)
 	case "analyzeLine":

@@ -278,7 +278,7 @@ func Test_Analyzer_YearDay(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 0, 0, 5, "", 0, 0, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 0, 0, 5, "day", 0, 0, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -418,7 +418,7 @@ func Test_Analyzer_Hourly(t *testing.T) {
 		t.Errorf("%v", err)
 		return
 	}
-	if err := utils.GetGotExpErr("records[0][0]", records[0][0], "2024-01-15 00:00:00"); err != nil {
+	if err := utils.GetGotExpErr("records[0][0]", records[0][0], "2024-01-15 00:20:00"); err != nil {
 		t.Errorf("%v", err)
 		return
 	}

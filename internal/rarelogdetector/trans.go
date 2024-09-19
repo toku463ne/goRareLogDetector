@@ -486,8 +486,10 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 				switch t.frequency {
 				case "hour":
 					retentionPos = lastdt.Year()*100000 + lastdt.YearDay()*100 + lastdt.Hour()
-				default:
+				case "day":
 					retentionPos = lastdt.Year()*1000 + lastdt.YearDay()
+				default:
+					retentionPos = 0
 				}
 			}
 			if err == nil {
@@ -502,8 +504,8 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 	}
 
 	if !registerPreTerms && !registerPT {
-		if t.phrases.DataDir != "" && !t.readOnly && t.blockSize > 0 {
-			if t.phrases.currItemCount >= t.blockSize || (t.currRetentionPos > 0 && retentionPos > t.currRetentionPos) {
+		if t.phrases.DataDir != "" && !t.readOnly {
+			if (t.blockSize > 0 && t.phrases.currItemCount >= t.blockSize) || (t.currRetentionPos > 0 && retentionPos > t.currRetentionPos) {
 				if err := t.next(); err != nil {
 					return -1, nil, "", err
 				}
