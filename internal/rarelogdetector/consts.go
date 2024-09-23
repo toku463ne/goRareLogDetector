@@ -17,7 +17,7 @@ const (
 	cDefaultBuffSize     = 10000
 	cErrorKeywords       = "failure|failed|error|down|crit"
 	cNFilesToCheckCount  = 5
-	cTermCountBorderRate = 0.001
+	cTermCountBorderRate = 0.999
 	cCountbyScoreLen     = 100
 
 	cAsteriskItemID = -1

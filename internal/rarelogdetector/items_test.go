@@ -513,3 +513,36 @@ func Test_ItemsWithDays(t *testing.T) {
 	}
 
 }
+
+func Test_ItemsFuncs(t *testing.T) {
+	its, err := newItems("", "items", 0, 0, "", false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	//test count border calculation
+	terms := []string{
+		"com01", "com02", "com03", "grp01", "unq01",
+		"com01", "com02", "com03", "grp01", "unq02",
+		"com01", "com02", "com03", "grp02", "unq03",
+		"com01", "com02", "com03", "grp02", "unq04",
+		"com01", "com02", "com03", "grp03", "unq05",
+	}
+
+	for _, term := range terms {
+		its.register(term, 1, 0, 0, term, false)
+	}
+
+	border := its.getCountBorder(0.1)
+	if err := utils.GetGotExpErr("rate=0.1", border, 5); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	border = its.getCountBorder(0.9)
+	if err := utils.GetGotExpErr("rate=0.9", border, 2); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+}

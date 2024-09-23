@@ -355,6 +355,43 @@ func (i *items) DeepCopy() *items {
 }
 
 func (i *items) getCountBorder(rate float64) int {
+	n := len(i.counts)
+	counts := make([]int, n)
+	j := 0
+	for _, cnt := range i.counts {
+		counts[j] = cnt
+		j++
+	}
+	sort.Slice(counts, func(i, j int) bool {
+		return counts[i] > counts[j]
+	})
+	total := i.totalCount
+	sum := 0
+	cnt := 0
+	preCnt := 0
+	oldCnt := 0
+	for _, cnt = range counts {
+		sum += cnt
+		if float64(sum)/float64(total) >= rate {
+			break
+		}
+		if cnt < oldCnt {
+			preCnt = oldCnt
+		}
+		oldCnt = cnt
+	}
+	if preCnt == 0 {
+		if oldCnt > 0 {
+			preCnt = oldCnt
+		} else {
+			preCnt = cnt
+		}
+	}
+
+	return preCnt
+}
+
+func (i *items) OLDgetCountBorder(rate float64) int {
 	counts := i.counts
 
 	maxCnt := 0

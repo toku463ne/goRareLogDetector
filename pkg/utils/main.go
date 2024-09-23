@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bufio"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -426,4 +427,41 @@ func ReadCsv(csfvile string) ([]string, [][]string, error) {
 	}
 
 	return header, records, nil
+}
+
+func Slice2File(lines []string, filePath string) error {
+	file, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	for _, line := range lines {
+		_, err := writer.WriteString(line + "\n")
+		if err != nil {
+			return err
+		}
+	}
+	return writer.Flush()
+}
+
+func ReadFile2Slice(filePath string) ([]string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return lines, nil
 }

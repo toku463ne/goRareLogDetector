@@ -48,19 +48,26 @@ var (
 	outputFile          string
 	delim               string
 	biggestN            int
+	_keywords           string
+	keywords            []string
+	_ignorewords        string
+	ignorewords         []string
 )
 
 type config struct {
-	DataDir         string   `yaml:"dataDir"`
-	LogPath         string   `yaml:"logPath"`
-	SearchStrings   []string `yaml:"searchString"`
-	ExcludeStrings  []string `yaml:"excludeString"`
-	LogFormat       string   `yaml:"logFormat"`
-	TimestampLayout string   `yaml:"timestampLayout"`
-	Retention       int64    `yaml:"retention"`
-	Frequency       string   `yaml:"frequency"`
-	MinMatchRate    float64  `yaml:"minMatchRate"`
-	MaxMatchRate    float64  `yaml:"maxMatchRate"`
+	DataDir             string   `yaml:"dataDir"`
+	LogPath             string   `yaml:"logPath"`
+	SearchStrings       []string `yaml:"searchString"`
+	ExcludeStrings      []string `yaml:"excludeString"`
+	LogFormat           string   `yaml:"logFormat"`
+	TimestampLayout     string   `yaml:"timestampLayout"`
+	Retention           int64    `yaml:"retention"`
+	Frequency           string   `yaml:"frequency"`
+	MinMatchRate        float64  `yaml:"minMatchRate"`
+	MaxMatchRate        float64  `yaml:"maxMatchRate"`
+	TermCountBorderRate float64  `yaml:"termCountBorderRate"`
+	Keywords            []string `yaml:"keiwords"`
+	Ignorewords         []string `yaml:"ignorewords"`
 }
 
 func init() {
@@ -80,12 +87,14 @@ func init() {
 	flag.IntVar(&N, "N", 0, "Show Top N rare logs in topN mode")
 	flag.IntVar(&M, "M", 0, "Show ony logs appeared M times in topN mode")
 	flag.Int64Var(&retention, "retention", 0, "Retention in the frequency to show")
-	flag.Float64Var(&termCountBorderRate, "R", 0.0, "Words that have less number than this rate will be ignored")
+	flag.Float64Var(&termCountBorderRate, "R", 0.999, "Words with less appearance will be replaced by '*'. The border is calculated by this rate.")
 	flag.BoolVar(&showLastText, "showLastText", false, "If show the last text in the phrase group instead of the phrase.")
 	flag.StringVar(&line, "line", "", "Log line to analyze")
 	flag.StringVar(&outputFile, "o", "", "Output file when using -m outputPhrases|outputPhrasesHistory")
 	flag.StringVar(&delim, "delim", "", "Deliminator of CSV file when using -m outputPhrases|outputPhrasesHistory")
 	flag.IntVar(&biggestN, "biggestN", 100, "Top N biggest groups when -m outputPhrases|outputPhrasesHistory")
+	flag.StringVar(&_keywords, "k", "", "List of terms to include in all phrases. Comma separated")
+	flag.StringVar(&_ignorewords, "i", "", "List of terms to include in all phrases. Comma separated")
 
 	logFormat = ""
 	timestampLayout = ""
@@ -125,6 +134,9 @@ func main() {
 	}()
 
 	flag.CommandLine.Parse(os.Args[1:])
+
+	keywords = strings.Split(_keywords, ",")
+	ignorewords = strings.Split(_ignorewords, ",")
 
 	// Load configuration
 	if configPath != "" {
@@ -218,6 +230,21 @@ func loadConfig(path string) error {
 	if frequency == "" {
 		frequency = c.Frequency
 	}
+	if minMatchRate == 0 {
+		minMatchRate = c.MinMatchRate
+	}
+	if maxMatchRate == 0 {
+		maxMatchRate = c.MaxMatchRate
+	}
+	if termCountBorderRate == 0 {
+		termCountBorderRate = c.TermCountBorderRate
+	}
+	if keywords == nil {
+		keywords = c.Keywords
+	}
+	if ignorewords == nil {
+		ignorewords = c.Ignorewords
+	}
 	return nil
 }
 
@@ -264,7 +291,9 @@ func run() error {
 		excludeStrings = []string{excludeString}
 	}
 
-	if utils.PathExist(fmt.Sprintf("%s/config.tbl.ini", dataDir)) {
+	tblDir := fmt.Sprintf("%s/config.tbl.ini", dataDir)
+	if utils.PathExist(tblDir) {
+		logrus.Infof("Loading config from %s\n", tblDir)
 		a, err = rarelogdetector.NewAnalyzer2(dataDir, searchStrings, excludeStrings, readOnly)
 	} else {
 		a, err = rarelogdetector.NewAnalyzer(dataDir, logPath, logFormat, timestampLayout,
@@ -272,6 +301,8 @@ func run() error {
 			maxBlocks, blockSize,
 			retention, frequency,
 			minMatchRate, maxMatchRate,
+			termCountBorderRate,
+			keywords, ignorewords,
 			readOnly)
 	}
 	if err != nil {
@@ -285,13 +316,13 @@ func run() error {
 	case "topN":
 		err = a.TopNShow(N, M, int(retention), showLastText, termCountBorderRate)
 	case "termCounts":
-		a.TermCountCountsShow(N)
+		err = a.TermCountCountsShow(N)
 	case "analyzeLine":
-		a.AnalyzeLine(line)
+		err = a.AnalyzeLine(line)
 	case "outputPhrases":
-		a.OutputPhrases(termCountBorderRate, delim, outputFile)
+		err = a.OutputPhrases(termCountBorderRate, delim, outputFile)
 	case "outputPhrasesHistory":
-		a.OutputPhrasesHistory(termCountBorderRate, biggestN, delim, outputFile)
+		err = a.OutputPhrasesHistory(termCountBorderRate, biggestN, delim, outputFile)
 	default:
 		err = errors.New("-m: mode must be one of topN|detect|feed|termCounts|analyzeLine|outputPhrases|clean")
 	}

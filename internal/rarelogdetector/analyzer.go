@@ -14,27 +14,30 @@ import (
 
 type Analyzer struct {
 	*csvdb.CsvDB
-	dataDir         string
-	logPath         string
-	logFormat       string
-	timestampLayout string
-	blockSize       int
-	maxBlocks       int
-	retention       int64
-	frequency       string
-	configTable     *csvdb.Table
-	lastStatusTable *csvdb.Table
-	trans           *trans
-	fp              *filepointer.FilePointer
-	filterRe        []*regexp.Regexp
-	xFilterRe       []*regexp.Regexp
-	lastFileEpoch   int64
-	lastFileRow     int
-	rowID           int64
-	readOnly        bool
-	linesProcessed  int
-	minMatchRate    float64
-	maxMatchRate    float64
+	dataDir             string
+	logPath             string
+	logFormat           string
+	timestampLayout     string
+	blockSize           int
+	maxBlocks           int
+	retention           int64
+	frequency           string
+	configTable         *csvdb.Table
+	lastStatusTable     *csvdb.Table
+	trans               *trans
+	fp                  *filepointer.FilePointer
+	filterRe            []*regexp.Regexp
+	xFilterRe           []*regexp.Regexp
+	lastFileEpoch       int64
+	lastFileRow         int
+	rowID               int64
+	readOnly            bool
+	linesProcessed      int
+	minMatchRate        float64
+	maxMatchRate        float64
+	termCountBorderRate float64
+	keywords            []string
+	ignorewords         []string
 }
 
 type phraseCnt struct {
@@ -54,6 +57,8 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	maxBlocks, blockSize int,
 	retention int64, frequency string,
 	minMatchRate, maxMatchRate float64,
+	termCountBorderRate float64,
+	keywords, ignorewords []string,
 	readOnly bool) (*Analyzer, error) {
 	a := new(Analyzer)
 	a.dataDir = dataDir
@@ -77,6 +82,14 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 		a.maxMatchRate = 0.0
 	} else {
 		a.maxMatchRate = maxMatchRate
+	}
+	a.keywords = keywords
+	a.ignorewords = ignorewords
+
+	if termCountBorderRate == 0 {
+		a.termCountBorderRate = cTermCountBorderRate
+	} else {
+		a.termCountBorderRate = termCountBorderRate
 	}
 	a.readOnly = readOnly
 
@@ -145,6 +158,9 @@ func (a *Analyzer) open() error {
 				return err
 			}
 			if err := a.saveConfig(); err != nil {
+				return err
+			}
+			if err := a.saveKeywords(); err != nil {
 				return err
 			}
 		}
@@ -223,7 +239,9 @@ func (a *Analyzer) init() error {
 	trans, err := newTrans(a.dataDir, a.logFormat, a.timestampLayout,
 		a.maxBlocks, a.blockSize,
 		a.retention, a.frequency,
+		a.termCountBorderRate,
 		a.filterRe, a.xFilterRe,
+		a.keywords, a.ignorewords,
 		true, a.readOnly)
 	if err != nil {
 		return err
@@ -245,7 +263,10 @@ func (a *Analyzer) loadStatus() error {
 	if err := a.configTable.Select1Row(nil,
 		tableDefs["config"],
 		&a.logPath,
-		&a.blockSize, &a.maxBlocks, &a.minMatchRate, &a.maxMatchRate,
+		&a.blockSize, &a.maxBlocks,
+		&a.retention, &a.frequency,
+		&a.minMatchRate, &a.maxMatchRate,
+		&a.termCountBorderRate,
 		&a.logFormat); err != nil {
 		return err
 	}
@@ -263,6 +284,10 @@ func (a *Analyzer) loadStatus() error {
 }
 
 func (a *Analyzer) load() error {
+	if err := a.loadKeywords(); err != nil {
+		return err
+	}
+
 	if err := a.trans.load(); err != nil {
 		return err
 	}
@@ -311,6 +336,7 @@ func (a *Analyzer) saveLastStatus() error {
 		"lastFileEpoch": epoch,
 		"lastFileRow":   rowNo,
 	})
+
 	return err
 }
 
@@ -319,20 +345,51 @@ func (a *Analyzer) saveConfig() error {
 		return nil
 	}
 
-	/*
-		{"logPath", "logFormat",
-				"blockSize", "maxBlocks", "maxItemBlocks",
-				"filterRe", "xFilterRe"}
-	*/
 	if err := a.configTable.Upsert(nil, map[string]interface{}{
-		"logPath":      a.logPath,
-		"blockSize":    a.blockSize,
-		"maxBlocks":    a.maxBlocks,
-		"minMatchRate": a.minMatchRate,
-		"maxMatchRate": a.maxMatchRate,
-		"logFormat":    a.logFormat,
+		"logPath":             a.logPath,
+		"blockSize":           a.blockSize,
+		"maxBlocks":           a.maxBlocks,
+		"retention":           a.retention,
+		"frequency":           a.frequency,
+		"minMatchRate":        a.minMatchRate,
+		"maxMatchRate":        a.maxMatchRate,
+		"termCountBorderRate": a.termCountBorderRate,
+		"logFormat":           a.logFormat,
 	}); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (a *Analyzer) getKeywordsFilePath() string {
+	return fmt.Sprintf("%s/keywords.txt", a.dataDir)
+}
+func (a *Analyzer) getIgnorewordsFilePath() string {
+	return fmt.Sprintf("%s/ignorewords.txt", a.dataDir)
+}
+
+func (a *Analyzer) saveKeywords() error {
+	if err := utils.Slice2File(a.keywords, a.getKeywordsFilePath()); err != nil {
+		return err
+	}
+	return utils.Slice2File(a.keywords, a.getIgnorewordsFilePath())
+}
+
+func (a *Analyzer) loadKeywords() error {
+	var err error
+	keywordsPath := a.getKeywordsFilePath()
+	if utils.PathExist(keywordsPath) {
+		a.keywords, err = utils.ReadFile2Slice(keywordsPath)
+		if err != nil {
+			return err
+		}
+	}
+	ignorewordsPath := a.getIgnorewordsFilePath()
+	if utils.PathExist(ignorewordsPath) {
+		a.ignorewords, err = utils.ReadFile2Slice(ignorewordsPath)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -351,6 +408,9 @@ func (a *Analyzer) commit(completed bool) error {
 		return err
 	}
 	if err := a.saveLastStatus(); err != nil {
+		return err
+	}
+	if err := a.saveKeywords(); err != nil {
 		return err
 	}
 
@@ -449,7 +509,7 @@ func (a *Analyzer) Detect(termCountBorderRate float64) ([]phraseCnt, error) {
 	}
 	p := a.trans.phrases
 	for i := range results {
-		phraseID, phraseStr := a.trans.registerPhrase(results[i].tokens, 0, "", false, a.minMatchRate, a.maxMatchRate)
+		phraseID, phraseStr := a.trans.registerPhrase(results[i].tokens, 0, "", false, 0, a.minMatchRate, a.maxMatchRate)
 		results[i].count = p.getCount(phraseID)
 		results[i].phrasestr = phraseStr
 	}
@@ -538,15 +598,24 @@ func (a *Analyzer) TermCountCountsShow(N int) error {
 }
 
 func (a *Analyzer) OutputPhrases(termCountBorderRate float64, delim, outfile string) error {
+	if termCountBorderRate == 0 {
+		termCountBorderRate = a.termCountBorderRate
+	}
 	if err := a.trans.outputPhrases(termCountBorderRate, delim, outfile); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (a *Analyzer) OutputPhrasesHistory(termCountBorderRate float64, biggestN int,
+func (a *Analyzer) OutputPhrasesHistory(termCountBorderRate float64,
+	biggestN int,
 	delim, outfile string) error {
-	if err := a.trans.outputPhrasesHistory(termCountBorderRate, biggestN,
+	if termCountBorderRate == 0 {
+		termCountBorderRate = a.termCountBorderRate
+	}
+	if err := a.trans.outputPhrasesHistory(termCountBorderRate,
+		a.minMatchRate, a.maxMatchRate,
+		biggestN,
 		delim, outfile); err != nil {
 		return err
 	}
@@ -613,7 +682,7 @@ func (a *Analyzer) _run(targetLinesCnt int,
 	if registerPreTerms {
 		a.trans.preTermRegistered = true
 		//a.trans.calcStats()
-		a.trans.calcCountBorder(cTermCountBorderRate)
+		a.trans.calcCountBorder(a.termCountBorderRate)
 	} else if registerPT {
 		a.trans.ptRegistered = true
 	} else {

@@ -15,33 +15,37 @@ import (
 )
 
 type trans struct {
-	terms             *items
-	preTerms          *items
-	phrases           *items
-	orgPhrases        *items
-	phraseScores      map[int]float64
-	replacer          *strings.Replacer
-	logFormatRe       *regexp.Regexp
-	timestampLayout   string
-	timestampPos      int
-	messagePos        int
-	blockSize         int
-	lastMessage       string
-	preTermRegistered bool
-	ptRegistered      bool
-	readOnly          bool
-	totalLines        int
-	minLineToDetect   int
-	latestUpdate      int64
-	filterRe          []*regexp.Regexp
-	xFilterRe         []*regexp.Regexp
-	currRetentionPos  int
-	countByBlock      int
-	maxCountByBlock   int
-	termCountBorder   int
-	retention         int64
-	frequency         string
-	pt                *phraseTree
+	terms               *items
+	preTerms            *items
+	phrases             *items
+	orgPhrases          *items
+	phraseScores        map[int]float64
+	replacer            *strings.Replacer
+	logFormatRe         *regexp.Regexp
+	timestampLayout     string
+	timestampPos        int
+	messagePos          int
+	blockSize           int
+	lastMessage         string
+	preTermRegistered   bool
+	ptRegistered        bool
+	readOnly            bool
+	totalLines          int
+	minLineToDetect     int
+	latestUpdate        int64
+	filterRe            []*regexp.Regexp
+	xFilterRe           []*regexp.Regexp
+	currRetentionPos    int
+	countByBlock        int
+	maxCountByBlock     int
+	termCountBorderRate float64
+	termCountBorder     int
+	retention           int64
+	frequency           string
+	keywords            map[string]string
+	keyTermIds          map[int]string
+	ignorewords         map[string]string
+	pt                  *phraseTree
 }
 
 type phraseScore struct {
@@ -55,12 +59,15 @@ type phraseTree struct {
 	childNodes map[int]*phraseTree
 	parent     *phraseTree
 	count      int
+	depth      int
 }
 
 func newTrans(dataDir, logFormat, timestampLayout string,
 	maxBlocks, blockSize int,
 	retention int64, frequency string,
+	termCountBorderRate float64,
 	filterRe, xFilterRe []*regexp.Regexp,
+	_keywords []string, _ignorewords []string,
 	useGzip, readOnly bool) (*trans, error) {
 	t := new(trans)
 	te, err := newItems(dataDir, "terms", maxBlocks, retention, frequency, useGzip)
@@ -96,6 +103,16 @@ func newTrans(dataDir, logFormat, timestampLayout string,
 	t.maxCountByBlock = 0
 	t.retention = retention
 	t.frequency = frequency
+	t.termCountBorderRate = termCountBorderRate
+	t.keywords = make(map[string]string)
+	t.ignorewords = make(map[string]string)
+	t.keyTermIds = make(map[int]string)
+	for _, word := range _keywords {
+		t.keywords[word] = ""
+	}
+	for _, word := range _ignorewords {
+		t.ignorewords[word] = ""
+	}
 
 	t.pt = &phraseTree{
 		count:      0,
@@ -125,7 +142,15 @@ func (t *trans) setBlockSize(blockSize int) {
 	}
 }
 func (t *trans) calcCountBorder(rate float64) {
-	t.termCountBorder = t.preTerms.getCountBorder(rate)
+	if rate == 0 {
+		rate = cTermCountBorderRate
+	}
+	if t.preTermRegistered {
+		t.termCountBorder = t.preTerms.getCountBorder(rate)
+	} else {
+		t.termCountBorder = t.terms.getCountBorder(rate)
+	}
+
 }
 
 func (t *trans) parseLogFormat(logFormat string) {
@@ -160,10 +185,11 @@ func (t *trans) load() error {
 	if err := t.phrases.load(); err != nil {
 		return err
 	}
+
 	//t.createPtFromPhrases()
-	if err := t.rearangePhrases(0); err != nil {
-		return err
-	}
+	//if err := t.rearangePhrases(t.termCountBorderRate); err != nil {
+	//	return err
+	//}
 
 	if err := t.calcPhrasesScore(); err != nil {
 		return err
@@ -265,6 +291,7 @@ func (t *trans) registerPtNode(termID int, pt *phraseTree) (*phraseTree, bool) {
 		childPT = &phraseTree{
 			count:  0,
 			parent: pt,
+			depth:  pt.depth + 1,
 		}
 		pt.childNodes[termID] = childPT
 	}
@@ -277,9 +304,10 @@ func (t *trans) registerPtNode(termID int, pt *phraseTree) (*phraseTree, bool) {
 
 func (t *trans) registerPt(tokens []int) {
 	pt := t.pt
-	_, sortedTerms, sortedCounts := t.sortTokensByCount(tokens)
+	sortedTerms, sortedCounts := t.sortTokensByCount(tokens)
 	for i, termID := range sortedTerms {
-		if sortedCounts[i] > t.termCountBorder {
+		_, ok := t.keyTermIds[termID]
+		if ok || sortedCounts[i] >= t.termCountBorder {
 			pt, _ = t.registerPtNode(termID, pt)
 		}
 	}
@@ -291,7 +319,7 @@ func (t *trans) searchPt(tokens []int, minLen, maxLen int) (int, int) {
 	if minLen == 0 {
 		minLen = 3
 	}
-	_, sortedTerms, sortedCounts := t.sortTokensByCount(tokens)
+	sortedTerms, sortedCounts := t.sortTokensByCount(tokens)
 	for i, termID := range sortedTerms {
 		pt, ok = pt.childNodes[termID]
 		if !ok {
@@ -327,30 +355,45 @@ func (t *trans) createPtFromPhrases() {
 	}
 }
 
-func (t *trans) sortTokensByCount(tokens []int) ([]int, []int, []int) {
+func (t *trans) sortTokensByCount(tokens []int) ([]int, []int) {
+	var te *items
+	if t.preTermRegistered {
+		te = t.preTerms
+	} else {
+		te = t.terms
+	}
 	n := len(tokens)
-	counts := make([]int, n)
-	for i, termID := range tokens {
-		counts[i] = t.preTerms.getCount(termID)
+	counts := make(map[int]int, 0)
+	for _, termID := range tokens {
+		counts[termID] = te.getCount(termID)
 	}
 	sortedTerms := make([]int, n)
 	sortedCounts := make([]int, n)
 	copy(sortedTerms, tokens)
-	copy(sortedCounts, counts)
-	sort.Slice(sortedCounts, func(i, j int) bool {
-		return sortedCounts[i] > sortedCounts[j]
-	})
-	sort.Slice(sortedTerms, func(i, j int) bool {
-		if sortedCounts[i] == sortedCounts[j] {
-			return tokens[i] < tokens[j]
+
+	// Sort both sortedTerms and sortedCounts together based on counts
+	sort.SliceStable(sortedTerms, func(i, j int) bool {
+		ti := counts[sortedTerms[i]]
+		tj := counts[sortedTerms[j]]
+
+		if ti > tj {
+			return true
 		}
-		return sortedCounts[i] > sortedCounts[j]
+		if ti == tj {
+			return sortedTerms[i] < sortedTerms[j] // Keep younger term first if counts are the same
+		}
+		return false
 	})
-	return counts, sortedTerms, sortedCounts
+
+	for i, termID := range sortedTerms {
+		sortedCounts[i] = counts[termID]
+	}
+
+	return sortedTerms, sortedCounts
 }
 
 func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
-	registerItem bool, minMatchRate, maxMatchRate float64) (int, string) {
+	registerItem bool, addCnt int, minMatchRate, maxMatchRate float64) (int, string) {
 
 	var te *items
 	if t.preTermRegistered {
@@ -379,7 +422,8 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 	lastToken := 0
 	if pos >= minLen {
 		for i, count := range counts {
-			if count >= minCnt {
+			_, ok := t.keyTermIds[tokens[i]]
+			if ok || count >= minCnt {
 				phrase = append(phrase, tokens[i])
 				lastToken = tokens[i]
 			} else {
@@ -390,21 +434,11 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 			}
 		}
 	} else {
-		for i, count := range counts {
-			if count > t.termCountBorder {
-				phrase = append(phrase, tokens[i])
-			} else {
-				phrase = append(phrase, tokens[i])
-			}
-		}
-		if len(phrase) <= 3 {
-			phrase = tokens
-		}
+		phrase = tokens
 	}
 
-	addCnt := 0
-	if registerItem {
-		addCnt = 1
+	if !registerItem {
+		addCnt = 0
 	}
 
 	phrasestr := ""
@@ -432,8 +466,14 @@ func (t *trans) toTermList(line string,
 	termID := -1
 
 	for _, w := range words {
-		if _, ok := enStopWords[w]; ok {
+		if _, ok := t.ignorewords[w]; ok {
 			continue
+		}
+		_, keyOK := t.keywords[w]
+		if _, ok := enStopWords[w]; ok {
+			if !keyOK {
+				continue
+			}
 		}
 
 		word := strings.ToLower(w)
@@ -451,8 +491,8 @@ func (t *trans) toTermList(line string,
 		if registerItem {
 			addCnt = 1
 		}
-		if len(word) > 2 || word == " " || word == "*" {
-			if utils.IsInt(word) && len(word) > cMaxNumDigits {
+		if keyOK || len(word) > 2 {
+			if !keyOK && utils.IsInt(word) && len(word) > cMaxNumDigits {
 				continue
 			}
 			if registerPreTerms {
@@ -461,6 +501,11 @@ func (t *trans) toTermList(line string,
 				termID = t.terms.register(word, addCnt, lastUpdate, lastUpdate, "", registerItem)
 			}
 			tokens = append(tokens, termID)
+			if keyOK {
+				t.keyTermIds[termID] = ""
+			}
+		} else if word == "*" {
+			tokens = append(tokens, cAsteriskItemID)
 		}
 	}
 
@@ -534,7 +579,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 			return -1, nil, "", errors.New("phrase tree not registered")
 		}
 		phraseID := -1
-		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, minMatchRate, maxMatchRate)
+		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, 1, minMatchRate, maxMatchRate)
 		phraseCnt = t.phrases.getCount(phraseID)
 	}
 
@@ -650,7 +695,7 @@ func (t *trans) analyzeLine(line string) error {
 }
 
 func (t *trans) rearangePhrases(termCountBorderRate float64) error {
-	p, err := newItems("", "phrase2", 0, 0, "", false)
+	p, err := newItems("", "rearranged_phrase", 0, 0, "", false)
 	if err != nil {
 		return err
 	}
@@ -665,44 +710,48 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 	t.pt = &phraseTree{
 		count:      0,
 		childNodes: nil,
-	}
-
-	for phraseID, line := range t.phrases.memberMap {
-		cnt := t.phrases.getCount(phraseID)
-		lastUpdate := t.phrases.getLastUpdate(phraseID)
-		createEpoch := t.phrases.getCreateEpoch(phraseID)
-		lastValue := t.phrases.getLastValue(phraseID)
-
-		plen := 0
-		words := strings.Split(line, " ")
-		phrasestr := ""
-		tokens := make([]int, 0)
-		lastTermID := 0
-		for _, term := range words {
-			termID := t.terms.getItemID(term)
-			termCnt := t.terms.getCount(termID)
-			if termCnt >= t.termCountBorder && lastTermID != cAsteriskItemID {
-				phrasestr += " " + term
-				tokens = append(tokens, termID)
-				lastTermID = termID
-				plen++
-			} else {
-				if lastTermID != cAsteriskItemID {
-					phrasestr += " *"
-				}
-				lastTermID = cAsteriskItemID
-			}
-		}
-		if plen < 3 {
-			phrasestr = line
-		}
-		phrasestr = strings.TrimSpace(phrasestr)
-		t.registerPt(tokens)
-		p.register(phrasestr, cnt, createEpoch, lastUpdate, lastValue, false)
+		depth:      0,
 	}
 
 	t.orgPhrases = t.phrases
 	t.phrases = p
+
+	for _, mode := range []int{1, 2} {
+		for phraseID, line := range t.orgPhrases.memberMap {
+			cnt := t.orgPhrases.getCount(phraseID)
+			lastUpdate := t.orgPhrases.getLastUpdate(phraseID)
+			//createEpoch := t.phrases.getCreateEpoch(phraseID)
+			lastValue := t.orgPhrases.getLastValue(phraseID)
+
+			//plen := 0
+			words := strings.Split(line, " ")
+			//phrasestr := ""
+			tokens := make([]int, 0)
+			longtokens := make([]int, 0)
+			for _, term := range words {
+				termID := t.terms.getItemID(term)
+				termCnt := t.terms.getCount(termID)
+
+				if termCnt >= t.termCountBorder || termID == cAsteriskItemID {
+					tokens = append(tokens, termID)
+				}
+				longtokens = append(longtokens, termID)
+			}
+
+			if len(tokens) < 3 {
+				tokens = longtokens
+			}
+			if mode == 1 {
+				t.registerPt(tokens)
+			}
+			if mode == 2 {
+				t.registerPhrase(tokens, lastUpdate, lastValue, true, cnt, 0, 0)
+			}
+		}
+	}
+
+	//t.orgPhrases = t.phrases
+	//t.phrases = p
 
 	if err := t.calcPhrasesScore(); err != nil {
 		return err
@@ -777,7 +826,9 @@ func (t *trans) outputPhrases(termCountBorderRate float64,
 }
 
 func (t *trans) outputPhrasesHistory(
-	termCountBorderRate float64, biggestN int,
+	termCountBorderRate float64,
+	minMatchRate, maxMatchRate float64,
+	biggestN int,
 	delim, outfile string) error {
 
 	unitsecs := utils.GetUnitsecs(t.frequency)
@@ -789,16 +840,15 @@ func (t *trans) outputPhrasesHistory(
 		}
 	}
 
+	attrs := make(map[int]map[int64]int, 0)
+
+	// phrase item to read database
 	var p *items
 	if t.orgPhrases != nil {
 		p = t.orgPhrases
 	} else {
 		p = t.phrases
 	}
-
-	phraseRanks := p.biggestNItems(biggestN)
-	attrs := make(map[int]map[int64]int, len(phraseRanks))
-
 	rows, err := p.SelectRows(nil, nil, tableDefs["items"])
 	if err != nil {
 		return err
@@ -824,16 +874,37 @@ func (t *trans) outputPhrasesHistory(
 		if err != nil {
 			return err
 		}
-		phraseID, _ := t.registerPhrase(tokens, lastUpdate, "", false, 0, 0)
+		phraseID, _ := t.registerPhrase(tokens, lastUpdate, "", false, 0, minMatchRate, maxMatchRate)
 		maxTime = createEpoch / unitsecs * unitsecs
-		_, ok := attrs[phraseID]
-		if !ok {
+		if _, ok := attrs[phraseID]; !ok {
 			attrs[phraseID] = make(map[int64]int, 0)
 		}
-		attrs[phraseID][maxTime] = itemCount
+		if _, ok := attrs[phraseID][maxTime]; !ok {
+			attrs[phraseID][maxTime] = 0
+		}
+		attrs[phraseID][maxTime] += itemCount
 		if first {
 			minTime = maxTime
 			first = false
+		}
+	}
+
+	phraseRanks := t.phrases.biggestNItems(biggestN)
+	rankMap := make(map[int]int)
+	for _, phraseID := range phraseRanks {
+		rankMap[phraseID] = t.phrases.getCount(phraseID)
+	}
+
+	// test if the count is correct
+	for _, phraseID := range phraseRanks {
+		attr := attrs[phraseID]
+		phraseCnt := rankMap[phraseID]
+		sum := 0
+		for _, cnt := range attr {
+			sum += cnt
+		}
+		if phraseCnt != sum {
+			return errors.New("count of phrase does not much")
 		}
 	}
 
