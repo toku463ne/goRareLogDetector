@@ -320,11 +320,11 @@ func run() error {
 	case "analyzeLine":
 		err = a.AnalyzeLine(line)
 	case "outputPhrases":
-		err = a.OutputPhrases(termCountBorderRate, delim, outputFile)
+		err = a.OutputPhrases(termCountBorderRate, biggestN, delim, outputFile)
 	case "outputPhrasesHistory":
 		err = a.OutputPhrasesHistory(termCountBorderRate, biggestN, delim, outputFile)
 	default:
-		err = errors.New("-m: mode must be one of topN|detect|feed|termCounts|analyzeLine|outputPhrases|clean")
+		err = errors.New("-m: mode must be one of topN|detect|feed|termCounts|analyzeLine|outputPhrases|outputPhrasesHistory|clean")
 	}
 	if err != nil {
 		return err

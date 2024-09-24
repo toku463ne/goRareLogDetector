@@ -77,3 +77,10 @@ func Test_real_sugcap2(t *testing.T) {
 	os.Args = []string{"rarelog", "-m", "outputPhrasesHistory", "-c", conf, "-biggestN", "1000"}
 	main()
 }
+
+func Test_real_sugcap2_countcount(t *testing.T) {
+	//conf := "/home/ubuntu/logandata/openvpn.yml"
+	conf := "/home/administrator/tests/sugcap2/sugcap.yml"
+	os.Args = []string{"rarelog", "-m", "termCounts", "-c", conf, "-biggestN", "10"}
+	main()
+}

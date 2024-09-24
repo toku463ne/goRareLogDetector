@@ -8,6 +8,7 @@ import (
 	"math"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -49,7 +50,8 @@ type phraseCnt struct {
 
 type termCntCount struct {
 	termCount int
-	Count     int
+	count     int
+	terms     string
 }
 
 func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
@@ -560,20 +562,30 @@ func (a *Analyzer) TopNShow(N, minCnt, days int,
 
 func (a *Analyzer) termCountCounts() []termCntCount {
 	termCounts := a.trans.terms.counts
+	members := a.trans.terms.memberMap
 
 	// Step 1: Count occurrences using a map
 	countMap := make(map[int]int)
-	for _, val := range termCounts {
+	wordsMap := make(map[int]string)
+	for termID, val := range termCounts {
 		countMap[val]++
+		if countMap[val] <= 5 {
+			w := members[termID]
+			if len(w) > 10 {
+				w = w[:10] + "..."
+			}
+			wordsMap[val] += " " + w
+		}
 	}
 
 	t := make([]termCntCount, 0)
-	for k, v := range countMap {
-		t = append(t, termCntCount{k, v})
+	for termCount, count := range countMap {
+		words := strings.TrimSpace(wordsMap[termCount])
+		t = append(t, termCntCount{termCount, count, words})
 	}
 
 	sort.Slice(t, func(i, j int) bool {
-		return t[i].termCount < t[j].termCount
+		return t[i].termCount > t[j].termCount
 	})
 
 	return t
@@ -586,9 +598,9 @@ func (a *Analyzer) TermCountCountsShow(N int) error {
 	counts := a.termCountCounts()
 
 	n := 0
-	fmt.Println("termCount,Count")
+	fmt.Println("termCount,count,samples")
 	for _, c := range counts {
-		fmt.Printf("%d,%d\n", c.termCount, c.Count)
+		fmt.Printf("%d,%d,%s\n", c.termCount, c.count, c.terms)
 		n++
 		if n >= N {
 			break
@@ -597,11 +609,13 @@ func (a *Analyzer) TermCountCountsShow(N int) error {
 	return nil
 }
 
-func (a *Analyzer) OutputPhrases(termCountBorderRate float64, delim, outfile string) error {
+func (a *Analyzer) OutputPhrases(termCountBorderRate float64,
+	biggestN int,
+	delim, outfile string) error {
 	if termCountBorderRate == 0 {
 		termCountBorderRate = a.termCountBorderRate
 	}
-	if err := a.trans.outputPhrases(termCountBorderRate, delim, outfile); err != nil {
+	if err := a.trans.outputPhrases(termCountBorderRate, biggestN, delim, outfile); err != nil {
 		return err
 	}
 	return nil

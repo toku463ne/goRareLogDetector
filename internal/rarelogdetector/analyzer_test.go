@@ -400,7 +400,7 @@ func Test_Analyzer_Hourly(t *testing.T) {
 	}
 
 	// OutputPhrases test
-	if err := a.OutputPhrases(0.5, ",", testDir+"/phrases.csv"); err != nil {
+	if err := a.OutputPhrases(0.5, 0, ",", testDir+"/phrases.csv"); err != nil {
 		t.Errorf("%v", err)
 		return
 	}

@@ -424,8 +424,14 @@ func (i *items) biggestNItems(N int) []int {
 
 	// Extract the top N itemIDs
 	var topN []int
-	for i := 0; i < N && i < len(kvs); i++ {
-		topN = append(topN, kvs[i].ItemID)
+	if N > 0 {
+		for i := 0; i < N && i < len(kvs); i++ {
+			topN = append(topN, kvs[i].ItemID)
+		}
+	} else {
+		for i := range kvs {
+			topN = append(topN, kvs[i].ItemID)
+		}
 	}
 
 	return topN

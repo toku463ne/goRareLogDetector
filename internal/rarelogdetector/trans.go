@@ -761,12 +761,19 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 }
 
 func (t *trans) outputPhrases(termCountBorderRate float64,
+	biggestN int,
 	delim, outfile string) error {
 
 	if termCountBorderRate > 0 {
 		if err := t.rearangePhrases(termCountBorderRate); err != nil {
 			return err
 		}
+	}
+
+	phraseRanks := t.phrases.biggestNItems(biggestN)
+	rankMap := make(map[int]int)
+	for _, phraseID := range phraseRanks {
+		rankMap[phraseID] = t.phrases.getCount(phraseID)
 	}
 
 	var writer *csv.Writer
@@ -801,7 +808,9 @@ func (t *trans) outputPhrases(termCountBorderRate float64,
 	}
 
 	format := "2006-01-02 15:04:05"
-	for phraseID, line := range t.phrases.memberMap {
+	for _, phraseID := range phraseRanks {
+		line := t.phrases.memberMap[phraseID]
+
 		if !t.match(line) {
 			continue
 		}
@@ -929,15 +938,15 @@ func (t *trans) outputPhrasesHistory(
 	// Pretty print header (adjust for pretty output to stdout)
 	if outfile == "" {
 		fmt.Printf("%-20s", "time")
-		for _, phraseID := range phraseRanks {
-			fmt.Printf("%-15s", strconv.Itoa(phraseID)+".count")
+		for i, _ := range phraseRanks {
+			fmt.Printf("%-15s", strconv.Itoa(i+1)+".count")
 		}
 		fmt.Println()
 	} else {
 		// Write CSV header for file output
 		header := []string{"time"}
-		for _, phraseID := range phraseRanks {
-			header = append(header, strconv.Itoa(phraseID)+".count")
+		for i, phraseID := range phraseRanks {
+			header = append(header, fmt.Sprintf("%d(%d)", i+1, t.phrases.getCount(phraseID)))
 		}
 		writer.Write(header)
 	}
