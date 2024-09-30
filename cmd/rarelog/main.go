@@ -66,7 +66,7 @@ type config struct {
 	MinMatchRate        float64  `yaml:"minMatchRate"`
 	MaxMatchRate        float64  `yaml:"maxMatchRate"`
 	TermCountBorderRate float64  `yaml:"termCountBorderRate"`
-	Keywords            []string `yaml:"keiwords"`
+	Keywords            []string `yaml:"keywords"`
 	Ignorewords         []string `yaml:"ignorewords"`
 }
 

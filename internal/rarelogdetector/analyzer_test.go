@@ -500,3 +500,162 @@ func Test_Analyzer_keywords(t *testing.T) {
 	}
 
 }
+
+func Test_Analyzer_rearangePhrases(t *testing.T) {
+	testDir, err := utils.InitTestDir("Test_Analyzer_rearangePhrases")
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	logPath := "../../test/data/rarelogdetector/analyzer/changablephrases.log*"
+	dataDir := testDir + "/data"
+	a, err := NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0,
+		nil, nil, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if err := a.Feed(0); err != nil {
+		t.Errorf("%v", err)
+		return
+	} else {
+		if err := utils.GetGotExpErr("lines processed", a.linesProcessed, 100); err != nil {
+			t.Errorf("%v", err)
+			return
+		}
+	}
+	// only uniq* words are converted to "*"
+	if err := utils.GetGotExpErr("len(a.trans.phrases.members)", len(a.trans.phrases.members), 10); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	// all members have 10
+	for phraseID, cnt := range a.trans.phrases.counts {
+		if err := utils.GetGotExpErr(fmt.Sprintf("Count of phraseID=%d", phraseID), cnt, 10); err != nil {
+			t.Errorf("%v", err)
+			return
+		}
+	}
+
+	line := "com1 grpa10 com2 uniq0401 grpa50 uniq0501 com3 uniq0601 grpa20 uniq0601"
+	exgroup := "com1 grpa10 com2 * grpa50 * com3 * grpa20 *"
+
+	phraseCnt, _, phrasestr, err := a.trans.tokenizeLine(line, 0, false, false, false, 0, 0)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("phraseCnt", phraseCnt, 10); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("phrasestr", phrasestr, exgroup); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	a.Close()
+	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0,
+		nil, nil, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	a.Close()
+	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0,
+		nil, nil, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	line = "com1 grpe10 com2 uniq0901 grpa50 uniq0901 com3 uniq0901 grpc20 uniq0901"
+	exgroup = "com1 grpe10 com2 * grpa50 * com3 * grpc20 *"
+
+	// rearange will not change with this rate
+	err = a.trans.rearangePhrases(0.8)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, false, false, false, 0, 0)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("phraseCnt", phraseCnt, 10); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("phrasestr", phrasestr, exgroup); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	a.Close()
+	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0,
+		nil, nil, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	// grpa*10 will be converted to "*"
+	err = a.trans.rearangePhrases(0.6)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	line = "com1 grpa10 com2 uniq0401 grpa50 uniq0501 com3 uniq0601 grpa20 uniq0601"
+	exgroup = "com1 * com2 * grpa50 * com3 * grpa20 *"
+	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, false, false, false, 0, 0)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("phraseCnt", phraseCnt, 20); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("phrasestr", phrasestr, exgroup); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	a.Close()
+	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0,
+		nil, nil, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	// grpa*10 will be converted to "*"
+	err = a.trans.rearangePhrases(0.5)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	line = "com1 grpa10 com2 uniq0401 grpa50 uniq0501 com3 uniq0601 grpa20 uniq0601"
+	exgroup = "com1 * com2 * grpa50 * com3 *"
+	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, false, false, false, 0, 0)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("phraseCnt", phraseCnt, 50); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	if err := utils.GetGotExpErr("phrasestr", phrasestr, exgroup); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+}

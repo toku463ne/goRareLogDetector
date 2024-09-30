@@ -281,7 +281,7 @@ func (t *trans) calcPhrasesScore() error {
 	return nil
 }
 
-func (t *trans) registerPtNode(termID int, pt *phraseTree) (*phraseTree, bool) {
+func (t *trans) registerPtNode(termID int, pt *phraseTree, addCnt int) (*phraseTree, bool) {
 	if pt.childNodes == nil {
 		pt.childNodes = make(map[int]*phraseTree)
 	}
@@ -295,20 +295,23 @@ func (t *trans) registerPtNode(termID int, pt *phraseTree) (*phraseTree, bool) {
 		}
 		pt.childNodes[termID] = childPT
 	}
-	childPT.count++
+	childPT.count += addCnt
 	if ok && childPT.count <= 0 {
 		delete(pt.childNodes, termID)
 	}
 	return childPT, ok
 }
 
-func (t *trans) registerPt(tokens []int) {
+func (t *trans) registerPt(tokens []int, addCnt int) {
 	pt := t.pt
 	sortedTerms, sortedCounts := t.sortTokensByCount(tokens)
 	for i, termID := range sortedTerms {
+		if termID == cAsteriskItemID {
+			continue
+		}
 		_, ok := t.keyTermIds[termID]
 		if ok || sortedCounts[i] >= t.termCountBorder {
-			pt, _ = t.registerPtNode(termID, pt)
+			pt, _ = t.registerPtNode(termID, pt, addCnt)
 		}
 	}
 }
@@ -344,14 +347,14 @@ func (t *trans) searchPt(tokens []int, minLen, maxLen int) (int, int) {
 }
 
 func (t *trans) createPtFromPhrases() {
-	for p := range t.phrases.members {
+	for p, phraseID := range t.phrases.members {
 		words := strings.Split(p, " ")
 		tokens := make([]int, len(words))
 		for i, term := range words {
 			termID := t.terms.getItemID(term)
 			tokens[i] = termID
 		}
-		t.registerPt(tokens)
+		t.registerPt(tokens, t.phrases.getCount(phraseID))
 	}
 }
 
@@ -570,7 +573,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 	if registerPreTerms {
 		t.totalLines++
 	} else if registerPT {
-		t.registerPt(tokens)
+		t.registerPt(tokens, 1)
 	} else {
 		//if strings.Contains(line, "[knobayashi] Inactivity timeout") {
 		//	println("here")
@@ -694,6 +697,29 @@ func (t *trans) analyzeLine(line string) error {
 	return nil
 }
 
+func (t *trans) prepareTokens(line string) []int {
+	words := strings.Split(line, " ")
+	//phrasestr := ""
+	tokens := make([]int, 0)
+	longtokens := make([]int, 0)
+	for _, term := range words {
+		termID := t.terms.getItemID(term)
+		termCnt := t.terms.getCount(termID)
+
+		if termCnt >= t.termCountBorder || (termID == cAsteriskItemID && tokens[len(tokens)-1] != cAsteriskItemID) {
+			tokens = append(tokens, termID)
+		} else if len(tokens) > 0 && termCnt < t.termCountBorder && tokens[len(tokens)-1] != cAsteriskItemID {
+			tokens = append(tokens, cAsteriskItemID)
+		}
+		longtokens = append(longtokens, termID)
+	}
+
+	if len(tokens) < 3 {
+		tokens = longtokens
+	}
+	return tokens
+}
+
 func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 	p, err := newItems("", "rearranged_phrase", 0, 0, "", false)
 	if err != nil {
@@ -720,33 +746,20 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 		for phraseID, line := range t.orgPhrases.memberMap {
 			cnt := t.orgPhrases.getCount(phraseID)
 			lastUpdate := t.orgPhrases.getLastUpdate(phraseID)
-			//createEpoch := t.phrases.getCreateEpoch(phraseID)
 			lastValue := t.orgPhrases.getLastValue(phraseID)
 
-			//plen := 0
-			words := strings.Split(line, " ")
-			//phrasestr := ""
-			tokens := make([]int, 0)
-			longtokens := make([]int, 0)
-			for _, term := range words {
-				termID := t.terms.getItemID(term)
-				termCnt := t.terms.getCount(termID)
+			tokens := t.prepareTokens(line)
 
-				if termCnt >= t.termCountBorder || termID == cAsteriskItemID {
-					tokens = append(tokens, termID)
-				}
-				longtokens = append(longtokens, termID)
-			}
-
-			if len(tokens) < 3 {
-				tokens = longtokens
-			}
 			if mode == 1 {
-				t.registerPt(tokens)
+				t.registerPt(tokens, cnt)
 			}
 			if mode == 2 {
 				t.registerPhrase(tokens, lastUpdate, lastValue, true, cnt, 0, 0)
 			}
+		}
+
+		if mode == 1 {
+			t.ptRegistered = true
 		}
 	}
 
@@ -849,6 +862,12 @@ func (t *trans) outputPhrasesHistory(
 		}
 	}
 
+	phraseRanks := t.phrases.biggestNItems(biggestN)
+	rankMap := make(map[int]int)
+	for _, phraseID := range phraseRanks {
+		rankMap[phraseID] = t.phrases.getCount(phraseID)
+	}
+
 	attrs := make(map[int]map[int64]int, 0)
 
 	// phrase item to read database
@@ -879,11 +898,12 @@ func (t *trans) outputPhrasesHistory(
 		if err != nil {
 			return err
 		}
-		tokens, err := t.toTermList(item, lastUpdate, false, false)
-		if err != nil {
-			return err
-		}
+		tokens := t.prepareTokens(item)
 		phraseID, _ := t.registerPhrase(tokens, lastUpdate, "", false, 0, minMatchRate, maxMatchRate)
+		if _, ok := rankMap[phraseID]; !ok {
+			continue
+		}
+
 		maxTime = createEpoch / unitsecs * unitsecs
 		if _, ok := attrs[phraseID]; !ok {
 			attrs[phraseID] = make(map[int64]int, 0)
@@ -896,12 +916,6 @@ func (t *trans) outputPhrasesHistory(
 			minTime = maxTime
 			first = false
 		}
-	}
-
-	phraseRanks := t.phrases.biggestNItems(biggestN)
-	rankMap := make(map[int]int)
-	for _, phraseID := range phraseRanks {
-		rankMap[phraseID] = t.phrases.getCount(phraseID)
 	}
 
 	// test if the count is correct
@@ -980,6 +994,37 @@ func (t *trans) outputPhrasesHistory(
 			}
 			writer.Write(row)
 			ep += unitsecs
+		}
+	}
+
+	if outfile == "" {
+		fmt.Printf("\n")
+		for i, phraseID := range phraseRanks {
+			phrase := t.phrases.memberMap[phraseID]
+			if len(phrase) > 200 {
+				phrase = phrase[:200]
+			}
+			fmt.Printf("%d.phrase: %s\n", i+1, phrase)
+		}
+	} else {
+		file, err := os.Create(outfile + ".phrases.txt")
+		if err != nil {
+			return fmt.Errorf("error creating file: %w", err)
+		}
+		defer file.Close()
+		writer = csv.NewWriter(file)
+		if delim == "" {
+			delim = ","
+		}
+		writer.Comma = rune(delim[0])
+		defer writer.Flush()
+		for i, phraseID := range phraseRanks {
+			phrase := t.phrases.memberMap[phraseID]
+			if len(phrase) > 200 {
+				phrase = phrase[:200]
+			}
+			row := []string{fmt.Sprintf("%d.phrase", i+1), phrase}
+			writer.Write(row)
 		}
 	}
 
