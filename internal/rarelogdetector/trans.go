@@ -469,6 +469,10 @@ func (t *trans) toTermList(line string,
 	termID := -1
 
 	for _, w := range words {
+		if w == "" {
+			continue
+		}
+
 		if _, ok := t.ignorewords[w]; ok {
 			continue
 		}
@@ -507,7 +511,7 @@ func (t *trans) toTermList(line string,
 			if keyOK {
 				t.keyTermIds[termID] = ""
 			}
-		} else if word == "*" {
+		} else if word == "*" && len(tokens) > 1 && tokens[len(tokens)-1] != cAsteriskItemID {
 			tokens = append(tokens, cAsteriskItemID)
 		}
 	}
@@ -521,6 +525,10 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 	var lastdt time.Time
 	var err error
 	phrasestr := ""
+
+	if !t.match(line) {
+		return -1, nil, "", nil
+	}
 
 	orgLine := line
 	phraseCnt := -1
@@ -614,6 +622,10 @@ func (t *trans) next() error {
 }
 
 func (t *trans) match(text string) bool {
+	if t.filterRe == nil && t.xFilterRe == nil {
+		return true
+	}
+
 	b := []byte(text)
 	matched := true
 	for _, filterRe := range t.filterRe {
@@ -851,7 +863,7 @@ func (t *trans) outputPhrasesHistory(
 	termCountBorderRate float64,
 	minMatchRate, maxMatchRate float64,
 	biggestN int,
-	delim, outfile string) error {
+	delim, outdir string) error {
 
 	unitsecs := utils.GetUnitsecs(t.frequency)
 	format := utils.GetDatetimeFormat(t.frequency)
@@ -933,10 +945,13 @@ func (t *trans) outputPhrasesHistory(
 	}
 
 	var writer *csv.Writer
-	if outfile == "" {
+	if outdir == "" {
 		writer = csv.NewWriter(os.Stdout)
 	} else {
-		file, err := os.Create(outfile)
+		if err := utils.EnsureDir(outdir); err != nil {
+			return err
+		}
+		file, err := os.Create(fmt.Sprintf("%s/history.csv", outdir))
 		if err != nil {
 			return fmt.Errorf("error creating file: %w", err)
 		}
@@ -950,7 +965,7 @@ func (t *trans) outputPhrasesHistory(
 	defer writer.Flush()
 
 	// Pretty print header (adjust for pretty output to stdout)
-	if outfile == "" {
+	if outdir == "" {
 		fmt.Printf("%-20s", "time")
 		for i, _ := range phraseRanks {
 			fmt.Printf("%-15s", strconv.Itoa(i+1)+".count")
@@ -966,7 +981,7 @@ func (t *trans) outputPhrasesHistory(
 	}
 
 	ep := minTime
-	if outfile == "" {
+	if outdir == "" {
 		for ep <= maxTime {
 			row := []string{time.Unix(ep, 0).Format(format)}
 			fmt.Printf("%-20s", row[0])
@@ -997,7 +1012,7 @@ func (t *trans) outputPhrasesHistory(
 		}
 	}
 
-	if outfile == "" {
+	if outdir == "" {
 		fmt.Printf("\n")
 		for i, phraseID := range phraseRanks {
 			phrase := t.phrases.memberMap[phraseID]
@@ -1007,7 +1022,7 @@ func (t *trans) outputPhrasesHistory(
 			fmt.Printf("%d.phrase: %s\n", i+1, phrase)
 		}
 	} else {
-		file, err := os.Create(outfile + ".phrases.txt")
+		file, err := os.Create(fmt.Sprintf("%s/phrases.txt", outdir))
 		if err != nil {
 			return fmt.Errorf("error creating file: %w", err)
 		}
@@ -1020,10 +1035,24 @@ func (t *trans) outputPhrasesHistory(
 		defer writer.Flush()
 		for i, phraseID := range phraseRanks {
 			phrase := t.phrases.memberMap[phraseID]
-			if len(phrase) > 200 {
-				phrase = phrase[:200]
-			}
 			row := []string{fmt.Sprintf("%d.phrase", i+1), phrase}
+			writer.Write(row)
+		}
+
+		file, err = os.Create(fmt.Sprintf("%s/samples.txt", outdir))
+		if err != nil {
+			return fmt.Errorf("error creating file: %w", err)
+		}
+		defer file.Close()
+		writer = csv.NewWriter(file)
+		if delim == "" {
+			delim = ","
+		}
+		writer.Comma = rune(delim[0])
+		defer writer.Flush()
+		for i, phraseID := range phraseRanks {
+			txt := t.phrases.lastValues[phraseID]
+			row := []string{fmt.Sprintf("%d.text", i+1), txt}
 			writer.Write(row)
 		}
 	}
