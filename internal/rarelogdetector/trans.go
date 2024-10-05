@@ -16,7 +16,6 @@ import (
 
 type trans struct {
 	terms               *items
-	preTerms            *items
 	phrases             *items
 	orgPhrases          *items
 	phraseScores        map[int]float64
@@ -27,7 +26,6 @@ type trans struct {
 	messagePos          int
 	blockSize           int
 	lastMessage         string
-	preTermRegistered   bool
 	ptRegistered        bool
 	readOnly            bool
 	totalLines          int
@@ -74,10 +72,6 @@ func newTrans(dataDir, logFormat, timestampLayout string,
 	if err != nil {
 		return nil, err
 	}
-	pte, err := newItems("", "terms", 0, retention, frequency, false)
-	if err != nil {
-		return nil, err
-	}
 
 	p, err := newItems(dataDir, "phrases", maxBlocks, retention, frequency, useGzip)
 	if err != nil {
@@ -85,13 +79,11 @@ func newTrans(dataDir, logFormat, timestampLayout string,
 	}
 
 	t.terms = te
-	t.preTerms = pte
 	t.phrases = p
 	t.blockSize = blockSize
 	t.replacer = getDelimReplacer()
 	t.parseLogFormat(logFormat)
 	t.timestampLayout = timestampLayout
-	t.preTermRegistered = false
 	t.ptRegistered = false
 	t.readOnly = readOnly
 	t.totalLines = 0
@@ -145,11 +137,7 @@ func (t *trans) calcCountBorder(rate float64) {
 	if rate == 0 {
 		rate = cTermCountBorderRate
 	}
-	if t.preTermRegistered {
-		t.termCountBorder = t.preTerms.getCountBorder(rate)
-	} else {
-		t.termCountBorder = t.terms.getCountBorder(rate)
-	}
+	t.termCountBorder = t.terms.getCountBorder(rate)
 
 }
 
@@ -186,19 +174,11 @@ func (t *trans) load() error {
 		return err
 	}
 
-	//t.createPtFromPhrases()
-	//if err := t.rearangePhrases(t.termCountBorderRate); err != nil {
-	//	return err
-	//}
-
 	if err := t.calcPhrasesScore(); err != nil {
 		return err
 	}
 
 	t.latestUpdate = t.phrases.lastUpdate
-
-	// merge to t.preTerms
-	t.preTerms = t.terms.DeepCopy()
 
 	return nil
 }
@@ -216,45 +196,13 @@ func (t *trans) commit(completed bool) error {
 	return nil
 }
 
-/*
-func (t *trans) calcStats() {
-	if !t.preTermRegistered {
-		return
-	}
-
-	te := t.preTerms
-	scores := make([]float64, te.maxItemID+1)
-	sum := 0.0
-
-	for termID, cnt := range te.counts {
-		scores[termID] = te.getIdf(termID)
-		sum += scores[termID] * float64(cnt)
-	}
-	average := sum / float64(te.totalCount)
-
-	varianceSum := 0.0
-	for i, score := range scores {
-		varianceSum += (score - average) * float64(te.counts[i]) * (score - average)
-	}
-	variance := varianceSum / float64(te.totalCount)
-	std := math.Sqrt(variance)
-
-	t.scoreAvg = average
-	t.scoreStd = std
-}
-*/
-
 func (t *trans) calcPhrasesScore() error {
 	var te *items
-	if t.preTermRegistered {
-		te = t.preTerms
-	} else {
-		te = t.terms
-	}
+	te = t.terms
 	p := *t.phrases
 	phraseScores := make(map[int]float64, 0)
 	for phraseID, line := range p.memberMap {
-		if tokens, err := t.toTermList(line, 0, false, false); err == nil {
+		if tokens, err := t.toTermList(line, 0, false); err == nil {
 			//scores := make([]float64, len(tokens))
 			scores := make([]float64, 0)
 			for _, itemID := range tokens {
@@ -359,12 +307,7 @@ func (t *trans) createPtFromPhrases() {
 }
 
 func (t *trans) sortTokensByCount(tokens []int) ([]int, []int) {
-	var te *items
-	if t.preTermRegistered {
-		te = t.preTerms
-	} else {
-		te = t.terms
-	}
+	te := t.terms
 	n := len(tokens)
 	counts := make(map[int]int, 0)
 	for _, termID := range tokens {
@@ -396,14 +339,8 @@ func (t *trans) sortTokensByCount(tokens []int) ([]int, []int) {
 }
 
 func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
-	registerItem bool, addCnt int, minMatchRate, maxMatchRate float64) (int, string) {
-
-	var te *items
-	if t.preTermRegistered {
-		te = t.preTerms
-	} else {
-		te = t.terms
-	}
+	addCnt int, minMatchRate, maxMatchRate float64) (int, string) {
+	te := t.terms
 	n := len(tokens)
 
 	phrase := make([]int, 0)
@@ -440,8 +377,9 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 		phrase = tokens
 	}
 
-	if !registerItem {
-		addCnt = 0
+	registerItem := false
+	if addCnt > 0 {
+		registerItem = true
 	}
 
 	phrasestr := ""
@@ -461,7 +399,7 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 
 func (t *trans) toTermList(line string,
 	lastUpdate int64,
-	registerItem, registerPreTerms bool) ([]int, error) {
+	registerItem bool) ([]int, error) {
 	line = t.replacer.Replace(line)
 	words := strings.Split(line, " ")
 	tokens := make([]int, 0)
@@ -474,12 +412,12 @@ func (t *trans) toTermList(line string,
 		}
 
 		if _, ok := t.ignorewords[w]; ok {
-			continue
+			w = "*"
 		}
 		_, keyOK := t.keywords[w]
 		if _, ok := enStopWords[w]; ok {
 			if !keyOK {
-				continue
+				w = "*"
 			}
 		}
 
@@ -502,11 +440,8 @@ func (t *trans) toTermList(line string,
 			if !keyOK && utils.IsInt(word) && len(word) > cMaxNumDigits {
 				continue
 			}
-			if registerPreTerms {
-				termID = t.preTerms.register(word, addCnt, lastUpdate, lastUpdate, "", registerItem)
-			} else {
-				termID = t.terms.register(word, addCnt, lastUpdate, lastUpdate, "", registerItem)
-			}
+			termID = t.terms.register(word, addCnt, lastUpdate, lastUpdate, "", registerItem)
+
 			tokens = append(tokens, termID)
 			if keyOK {
 				t.keyTermIds[termID] = ""
@@ -519,8 +454,10 @@ func (t *trans) toTermList(line string,
 	return tokens, nil
 }
 
-func (t *trans) tokenizeLine(line string, fileEpoch int64,
-	registerItem, registerPreTerms, registerPT bool,
+/*
+stage: 1=registerTerm 2=registerPT 3=registerPhrase
+*/
+func (t *trans) tokenizeLine(line string, fileEpoch int64, stage int,
 	minMatchRate, maxMatchRate float64) (int, []int, string, error) {
 	var lastdt time.Time
 	var err error
@@ -559,7 +496,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 		}
 	}
 
-	if !registerPreTerms && !registerPT {
+	if stage == cStageRegisterPhrases {
 		if t.phrases.DataDir != "" && !t.readOnly {
 			if (t.blockSize > 0 && t.phrases.currItemCount >= t.blockSize) || (t.currRetentionPos > 0 && retentionPos > t.currRetentionPos) {
 				if err := t.next(); err != nil {
@@ -569,39 +506,44 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64,
 		}
 	}
 
+	registerItem := false
+	if stage == cStageRegisterTerms {
+		registerItem = true
+	}
+
 	t.lastMessage = line
 
-	tokens, err := t.toTermList(line, lastUpdate, registerItem, registerPreTerms)
+	tokens, err := t.toTermList(line, lastUpdate, registerItem)
 	if err != nil {
 		return -1, nil, "", err
 	}
 
 	t.countByBlock++
 
-	if registerPreTerms {
-		t.totalLines++
-	} else if registerPT {
-		t.registerPt(tokens, 1)
-	} else {
-		//if strings.Contains(line, "[knobayashi] Inactivity timeout") {
-		//	println("here")
-		//}
-		if !t.ptRegistered {
-			return -1, nil, "", errors.New("phrase tree not registered")
-		}
-		phraseID := -1
-		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, registerItem, 1, minMatchRate, maxMatchRate)
-		phraseCnt = t.phrases.getCount(phraseID)
-	}
-
-	if registerPreTerms {
+	switch stage {
+	case cStageRegisterTerms:
 		if t.currRetentionPos > 0 && retentionPos > t.currRetentionPos {
 			if t.countByBlock > t.maxCountByBlock {
 				t.maxCountByBlock = t.countByBlock
 			}
 			t.countByBlock = 0
 		}
+		t.totalLines++
+	case cStageRegisterPT:
+		t.registerPt(tokens, 1)
+	case cStageRegisterPhrases:
+		if !t.ptRegistered {
+			return -1, nil, "", errors.New("phrase tree not registered")
+		}
+		phraseID := -1
+		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, 1, minMatchRate, maxMatchRate)
+		phraseCnt = t.phrases.getCount(phraseID)
+	default:
+		phraseID := -1
+		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, 0, minMatchRate, maxMatchRate)
+		phraseCnt = t.phrases.getCount(phraseID)
 	}
+
 	t.currRetentionPos = retentionPos
 
 	return phraseCnt, tokens, phrasestr, nil
@@ -695,7 +637,7 @@ func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64,
 func (t *trans) analyzeLine(line string) error {
 	te := t.terms
 
-	_, token, phrasestr, err := t.tokenizeLine(line, 0, false, false, false, 1.0, 0.0)
+	_, token, phrasestr, err := t.tokenizeLine(line, 0, cStageElse, 1.0, 0.0)
 	if err != nil {
 		return err
 	}
@@ -709,19 +651,23 @@ func (t *trans) analyzeLine(line string) error {
 	return nil
 }
 
-func (t *trans) prepareTokens(line string) []int {
+func (t *trans) OLDstr2Tokens(line string) []int {
 	words := strings.Split(line, " ")
 	//phrasestr := ""
 	tokens := make([]int, 0)
 	longtokens := make([]int, 0)
+	excluded_words := make(map[string]string, 0)
+
 	for _, term := range words {
 		termID := t.terms.getItemID(term)
 		termCnt := t.terms.getCount(termID)
 
-		if termCnt >= t.termCountBorder || (termID == cAsteriskItemID && tokens[len(tokens)-1] != cAsteriskItemID) {
+		if termCnt >= t.termCountBorder || (len(tokens) > 0 && termID == cAsteriskItemID && tokens[len(tokens)-1] != cAsteriskItemID) {
 			tokens = append(tokens, termID)
 		} else if len(tokens) > 0 && termCnt < t.termCountBorder && tokens[len(tokens)-1] != cAsteriskItemID {
 			tokens = append(tokens, cAsteriskItemID)
+		} else {
+			excluded_words[term] = ""
 		}
 		longtokens = append(longtokens, termID)
 	}
@@ -760,13 +706,16 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 			lastUpdate := t.orgPhrases.getLastUpdate(phraseID)
 			lastValue := t.orgPhrases.getLastValue(phraseID)
 
-			tokens := t.prepareTokens(line)
+			tokens, err := t.toTermList(line, 0, false)
+			if err != nil {
+				return err
+			}
 
 			if mode == 1 {
 				t.registerPt(tokens, cnt)
 			}
 			if mode == 2 {
-				t.registerPhrase(tokens, lastUpdate, lastValue, true, cnt, 0, 0)
+				t.registerPhrase(tokens, lastUpdate, lastValue, cnt, 0, 0)
 			}
 		}
 
@@ -910,8 +859,11 @@ func (t *trans) outputPhrasesHistory(
 		if err != nil {
 			return err
 		}
-		tokens := t.prepareTokens(item)
-		phraseID, _ := t.registerPhrase(tokens, lastUpdate, "", false, 0, minMatchRate, maxMatchRate)
+		tokens, err := t.toTermList(item, lastUpdate, false)
+		if err != nil {
+			return err
+		}
+		phraseID, _ := t.registerPhrase(tokens, lastUpdate, "", 0, minMatchRate, maxMatchRate)
 		if _, ok := rankMap[phraseID]; !ok {
 			continue
 		}

@@ -425,12 +425,12 @@ func Test_Analyzer_Hourly(t *testing.T) {
 	}
 
 	// OutputPhrasesHistory test
-	if err := a.OutputPhrasesHistory(0.5, 10, ",", testDir+"/phrasehist.csv"); err != nil {
+	if err := a.OutputPhrasesHistory(0.5, 10, ",", testDir+"/out"); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
-	header, records, err = utils.ReadCsv(testDir + "/phrasehist.csv")
+	header, records, err = utils.ReadCsv(testDir + "/out/history.csv")
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -543,7 +543,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 	line := "com1 grpa10 com2 uniq0401 grpa50 uniq0501 com3 uniq0601 grpa20 uniq0601"
 	exgroup := "com1 grpa10 com2 * grpa50 * com3 * grpa20 *"
 
-	phraseCnt, _, phrasestr, err := a.trans.tokenizeLine(line, 0, false, false, false, 0, 0)
+	phraseCnt, _, phrasestr, err := a.trans.tokenizeLine(line, 0, cStageElse, 0, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -582,7 +582,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 		t.Errorf("%v", err)
 		return
 	}
-	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, false, false, false, 0, 0)
+	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, cStageElse, 0, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -613,7 +613,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 
 	line = "com1 grpa10 com2 uniq0401 grpa50 uniq0501 com3 uniq0601 grpa20 uniq0601"
 	exgroup = "com1 * com2 * grpa50 * com3 * grpa20 *"
-	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, false, false, false, 0, 0)
+	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, cStageElse, 0, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -644,7 +644,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 
 	line = "com1 grpa10 com2 uniq0401 grpa50 uniq0501 com3 uniq0601 grpa20 uniq0601"
 	exgroup = "com1 * com2 * grpa50 * com3 *"
-	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, false, false, false, 0, 0)
+	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, cStageElse, 0, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return

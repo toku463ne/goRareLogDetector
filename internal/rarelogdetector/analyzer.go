@@ -456,7 +456,7 @@ func (a *Analyzer) initFilePointer() error {
 
 func (a *Analyzer) Feed(targetLinesCnt int) error {
 	logrus.Infof("Counting terms")
-	if _, err := a._run(targetLinesCnt, true, false, false); err != nil {
+	if _, err := a._run(targetLinesCnt, cStageRegisterTerms, false); err != nil {
 		return err
 	}
 
@@ -464,7 +464,7 @@ func (a *Analyzer) Feed(targetLinesCnt int) error {
 	a.trans.currRetentionPos = 0
 
 	logrus.Debug("Starting phrase tree registration")
-	if _, err := a._run(0, false, true, false); err != nil {
+	if _, err := a._run(0, cStageRegisterPT, false); err != nil {
 		return err
 	}
 	logrus.Debug("Completed phrase tree registration")
@@ -473,7 +473,7 @@ func (a *Analyzer) Feed(targetLinesCnt int) error {
 	a.trans.currRetentionPos = 0
 
 	logrus.Infof("Analyzing log")
-	if _, err := a._run(targetLinesCnt, false, false, false); err != nil {
+	if _, err := a._run(targetLinesCnt, cStageRegisterPhrases, false); err != nil {
 		return err
 	}
 
@@ -482,7 +482,7 @@ func (a *Analyzer) Feed(targetLinesCnt int) error {
 
 func (a *Analyzer) Detect(termCountBorderRate float64) ([]phraseCnt, error) {
 	logrus.Debug("Starting term registration")
-	if _, err := a._run(0, true, false, false); err != nil {
+	if _, err := a._run(0, cStageRegisterTerms, false); err != nil {
 		return nil, err
 	}
 	logrus.Debug("Completed term registration")
@@ -491,7 +491,7 @@ func (a *Analyzer) Detect(termCountBorderRate float64) ([]phraseCnt, error) {
 	a.trans.currRetentionPos = 0
 
 	logrus.Debug("Starting phrase tree registration")
-	if _, err := a._run(0, false, true, false); err != nil {
+	if _, err := a._run(0, cStageRegisterPT, false); err != nil {
 		return nil, err
 	}
 	logrus.Debug("Completed phrase tree registration")
@@ -500,7 +500,7 @@ func (a *Analyzer) Detect(termCountBorderRate float64) ([]phraseCnt, error) {
 	a.trans.currRetentionPos = 0
 
 	logrus.Debug("Starting log analyzing")
-	results, err := a._run(0, false, false, true)
+	results, err := a._run(0, cStageRegisterPhrases, true)
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +511,7 @@ func (a *Analyzer) Detect(termCountBorderRate float64) ([]phraseCnt, error) {
 	}
 	p := a.trans.phrases
 	for i := range results {
-		phraseID, phraseStr := a.trans.registerPhrase(results[i].tokens, 0, "", false, 0, a.minMatchRate, a.maxMatchRate)
+		phraseID, phraseStr := a.trans.registerPhrase(results[i].tokens, 0, "", 0, a.minMatchRate, a.maxMatchRate)
 		results[i].count = p.getCount(phraseID)
 		results[i].phrasestr = phraseStr
 	}
@@ -592,7 +592,7 @@ func (a *Analyzer) termCountCounts() []termCntCount {
 }
 
 func (a *Analyzer) TermCountCountsShow(N int) error {
-	if _, err := a._run(0, true, false, false); err != nil {
+	if _, err := a._run(0, cStageElse, false); err != nil {
 		return err
 	}
 	counts := a.termCountCounts()
@@ -637,13 +637,9 @@ func (a *Analyzer) OutputPhrasesHistory(termCountBorderRate float64,
 }
 
 func (a *Analyzer) _run(targetLinesCnt int,
-	registerPreTerms, registerPT bool, detectMode bool) ([]phraseCnt, error) {
+	stage int, detectMode bool) ([]phraseCnt, error) {
 	var results []phraseCnt
 	linesProcessed := 0
-	registerItems := true
-	if registerPT {
-		registerItems = false
-	}
 
 	if err := a.initFilePointer(); err != nil {
 		return nil, err
@@ -660,8 +656,8 @@ func (a *Analyzer) _run(targetLinesCnt int,
 			continue
 		}
 
-		_, tokens, _, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), registerItems,
-			registerPreTerms, registerPT, a.minMatchRate, a.maxMatchRate)
+		_, tokens, _, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), stage,
+			a.minMatchRate, a.maxMatchRate)
 		if err != nil {
 			return nil, err
 		}
@@ -687,21 +683,22 @@ func (a *Analyzer) _run(targetLinesCnt int,
 			break
 		}
 	}
-	if !registerPreTerms && !registerPT && !a.readOnly {
+	if stage == cStageRegisterPhrases && !a.readOnly {
 		if err := a.commit(false); err != nil {
 			return nil, err
 		}
 		logrus.Infof("processed %d lines", linesProcessed)
 	}
-	if registerPreTerms {
-		a.trans.preTermRegistered = true
-		//a.trans.calcStats()
+
+	switch stage {
+	case cStageRegisterTerms:
 		a.trans.calcCountBorder(a.termCountBorderRate)
-	} else if registerPT {
+	case cStageRegisterPT:
 		a.trans.ptRegistered = true
-	} else {
+	case cStageRegisterPhrases:
 		a.trans.calcPhrasesScore()
 	}
+
 	a.linesProcessed = linesProcessed
 	a.fp.Close()
 
