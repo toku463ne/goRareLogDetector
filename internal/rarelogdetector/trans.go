@@ -19,6 +19,7 @@ type trans struct {
 	phrases             *items
 	orgPhrases          *items
 	phraseScores        map[int]float64
+	subjects            map[int]string
 	replacer            *strings.Replacer
 	logFormatRe         *regexp.Regexp
 	timestampLayout     string
@@ -89,6 +90,7 @@ func newTrans(dataDir, logFormat, timestampLayout string,
 	t.totalLines = 0
 	t.minLineToDetect = 0
 	t.phraseScores = make(map[int]float64, 10000)
+	t.subjects = make(map[int]string, 0)
 	t.filterRe = filterRe
 	t.xFilterRe = xFilterRe
 	t.countByBlock = 0
@@ -252,6 +254,17 @@ func (t *trans) registerPtNode(termID int, pt *phraseTree, addCnt int) (*phraseT
 
 func (t *trans) registerPt(tokens []int, addCnt int) {
 	pt := t.pt
+	sortedTerms, _ := t.sortTokensByCount(tokens)
+	for _, termID := range sortedTerms {
+		if termID == cAsteriskItemID {
+			continue
+		}
+		pt, _ = t.registerPtNode(termID, pt, addCnt)
+	}
+}
+
+func (t *trans) OLDregisterPt(tokens []int, addCnt int) {
+	pt := t.pt
 	sortedTerms, sortedCounts := t.sortTokensByCount(tokens)
 	for i, termID := range sortedTerms {
 		if termID == cAsteriskItemID {
@@ -279,7 +292,7 @@ func (t *trans) searchPt(tokens []int, minLen, maxLen int) (int, int) {
 			}
 			return sortedCounts[i-1], i
 		}
-		if pt.count <= 1 {
+		if pt.count <= 1 || sortedCounts[i] < t.termCountBorder {
 			if i+1 > minLen {
 				if i == 0 {
 					return 0, 0
@@ -291,18 +304,10 @@ func (t *trans) searchPt(tokens []int, minLen, maxLen int) (int, int) {
 			return sortedCounts[i], i
 		}
 	}
-	return sortedCounts[len(sortedCounts)-1], -1
-}
-
-func (t *trans) createPtFromPhrases() {
-	for p, phraseID := range t.phrases.members {
-		words := strings.Split(p, " ")
-		tokens := make([]int, len(words))
-		for i, term := range words {
-			termID := t.terms.getItemID(term)
-			tokens[i] = termID
-		}
-		t.registerPt(tokens, t.phrases.getCount(phraseID))
+	if len(sortedCounts) > 0 {
+		return sortedCounts[len(sortedCounts)-1], -1
+	} else {
+		return -1, -1
 	}
 }
 
@@ -338,10 +343,30 @@ func (t *trans) sortTokensByCount(tokens []int) ([]int, []int) {
 	return sortedTerms, sortedCounts
 }
 
+func (t *trans) registerSubject(phraseID int, line string, replaces map[int]string) string {
+	if len(replaces) == 0 {
+		t.subjects[phraseID] = line
+		return line
+	}
+
+	for _, word := range replaces {
+		// Use capturing groups to capture delimiters and replace only the word
+		pattern := `(?i)(^|` + cDelimiters + `)(` + regexp.QuoteMeta(word) + `)($|` + cDelimiters + `)`
+		reg := regexp.MustCompile(pattern)
+		line = reg.ReplaceAllString(line, `$1`+"*"+`$3`)
+	}
+	// Combine multiple consecutive "*" into a single "*"
+	reg := regexp.MustCompile(`\*[\s\t]*\*`)
+	line = reg.ReplaceAllString(line, `*`)
+	t.subjects[phraseID] = line
+	return line
+}
+
 func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 	addCnt int, minMatchRate, maxMatchRate float64) (int, string) {
 	te := t.terms
 	n := len(tokens)
+	excludesMap := make(map[int]string)
 
 	phrase := make([]int, 0)
 	counts := make([]int, n)
@@ -362,14 +387,18 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 	lastToken := 0
 	if pos >= minLen {
 		for i, count := range counts {
-			_, ok := t.keyTermIds[tokens[i]]
+			termID := tokens[i]
+			_, ok := t.keyTermIds[termID]
 			if ok || count >= minCnt {
-				phrase = append(phrase, tokens[i])
-				lastToken = tokens[i]
+				phrase = append(phrase, termID)
+				lastToken = termID
 			} else {
 				if lastToken != cAsteriskItemID {
 					phrase = append(phrase, cAsteriskItemID)
 					lastToken = cAsteriskItemID
+				}
+				if termID != cAsteriskItemID {
+					excludesMap[termID] = t.terms.getMember(termID)
 				}
 			}
 		}
@@ -389,9 +418,13 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 		phrasestr += " " + word
 	}
 	phrasestr = strings.TrimSpace(phrasestr)
+	_, ok := t.phrases.members[phrasestr]
 	phraseID := t.phrases.register(phrasestr, addCnt, lastUpdate, lastUpdate, lastValue, registerItem)
 	if lastUpdate > t.latestUpdate {
 		t.latestUpdate = lastUpdate
+	}
+	if !ok && lastValue != "" {
+		t.registerSubject(phraseID, lastValue, excludesMap)
 	}
 
 	return phraseID, phrasestr
@@ -700,7 +733,7 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 	t.orgPhrases = t.phrases
 	t.phrases = p
 
-	for _, mode := range []int{1, 2} {
+	for _, stage := range []int{cStageRegisterPT, cStageRegisterPhrases} {
 		for phraseID, line := range t.orgPhrases.memberMap {
 			cnt := t.orgPhrases.getCount(phraseID)
 			lastUpdate := t.orgPhrases.getLastUpdate(phraseID)
@@ -710,16 +743,19 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 			if err != nil {
 				return err
 			}
-
-			if mode == 1 {
-				t.registerPt(tokens, cnt)
+			if len(tokens) == 0 {
+				return errors.New("found null phrase")
 			}
-			if mode == 2 {
+
+			switch stage {
+			case cStageRegisterPT:
+				t.registerPt(tokens, cnt)
+			case cStageRegisterPhrases:
 				t.registerPhrase(tokens, lastUpdate, lastValue, cnt, 0, 0)
 			}
 		}
 
-		if mode == 1 {
+		if cStageRegisterPT == 1 {
 			t.ptRegistered = true
 		}
 	}
@@ -795,7 +831,8 @@ func (t *trans) outputPhrases(termCountBorderRate float64,
 		row = append(row, time.Unix(t.phrases.getCreateEpoch(phraseID), 0).Format(format))
 		row = append(row, time.Unix(t.phrases.getLastUpdate(phraseID), 0).Format(format))
 		row = append(row, strconv.Itoa(int(t.phrases.getCount(phraseID))))
-		row = append(row, t.phrases.getMember(phraseID))
+		//row = append(row, t.phrases.getMember(phraseID))
+		row = append(row, t.subjects[phraseID])
 
 		if outfile == "" {
 			// Pretty print each row to stdout
@@ -942,7 +979,7 @@ func (t *trans) outputPhrasesHistory(
 				if ok {
 					fmt.Printf("%-15s", strconv.Itoa(count))
 				} else {
-					fmt.Printf("%-15s", "0")
+					fmt.Printf("%-15s", "")
 				}
 			}
 			fmt.Print("\n")
@@ -956,7 +993,7 @@ func (t *trans) outputPhrasesHistory(
 				if ok {
 					row = append(row, strconv.Itoa(count))
 				} else {
-					row = append(row, "0")
+					row = append(row, "")
 				}
 			}
 			writer.Write(row)
@@ -967,14 +1004,16 @@ func (t *trans) outputPhrasesHistory(
 	if outdir == "" {
 		fmt.Printf("\n")
 		for i, phraseID := range phraseRanks {
-			phrase := t.phrases.memberMap[phraseID]
-			if len(phrase) > 200 {
-				phrase = phrase[:200]
+			subject := t.subjects[phraseID]
+			if len(subject) > 200 {
+				subject = subject[:200]
 			}
-			fmt.Printf("%d.phrase: %s\n", i+1, phrase)
+			cnt := t.phrases.getCount(phraseID)
+			//fmt.Printf("%d.phrase: %s\n", i+1, phrase)
+			fmt.Printf("%d(%d): %s\n", i+1, cnt, subject)
 		}
 	} else {
-		file, err := os.Create(fmt.Sprintf("%s/phrases.txt", outdir))
+		file, err := os.Create(fmt.Sprintf("%s/subjects.txt", outdir))
 		if err != nil {
 			return fmt.Errorf("error creating file: %w", err)
 		}
@@ -986,27 +1025,12 @@ func (t *trans) outputPhrasesHistory(
 		writer.Comma = rune(delim[0])
 		defer writer.Flush()
 		for i, phraseID := range phraseRanks {
-			phrase := t.phrases.memberMap[phraseID]
-			row := []string{fmt.Sprintf("%d.phrase", i+1), phrase}
+			subject := t.subjects[phraseID]
+			cnt := t.phrases.getCount(phraseID)
+			row := []string{fmt.Sprintf("%d(%d)", i+1, cnt), subject}
 			writer.Write(row)
 		}
 
-		file, err = os.Create(fmt.Sprintf("%s/samples.txt", outdir))
-		if err != nil {
-			return fmt.Errorf("error creating file: %w", err)
-		}
-		defer file.Close()
-		writer = csv.NewWriter(file)
-		if delim == "" {
-			delim = ","
-		}
-		writer.Comma = rune(delim[0])
-		defer writer.Flush()
-		for i, phraseID := range phraseRanks {
-			txt := t.phrases.lastValues[phraseID]
-			row := []string{fmt.Sprintf("%d.text", i+1), txt}
-			writer.Write(row)
-		}
 	}
 
 	return nil

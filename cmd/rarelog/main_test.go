@@ -73,8 +73,8 @@ func Test_real_sugcap(t *testing.T) {
 
 func Test_real_sugcap2(t *testing.T) {
 	//conf := "/home/ubuntu/logandata/openvpn.yml"
-	conf := "/home/ubuntu/tests/capdata/sugcap.yml"
-	os.Args = []string{"rarelog", "-m", "outputPhrasesHistory", "-c", conf, "-biggestN", "1", "-R", "0.6"}
+	conf := "/home/administrator/tests/sugcap2/sugcap.yml"
+	os.Args = []string{"rarelog", "-m", "outputPhrasesHistory", "-c", conf, "-biggestN", "1", "-R", "0.6", "-o", "/tmp/out"}
 	main()
 }
 

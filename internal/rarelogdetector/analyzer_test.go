@@ -126,7 +126,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		t.Errorf("%v", err)
 		return
 	}
-	if err := utils.GetGotExpErr("results[1].count", results[0].count, 28); err != nil {
+	if err := utils.GetGotExpErr("results[0].count", results[0].count, 28); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -540,7 +540,13 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 		}
 	}
 
-	line := "com1 grpa10 com2 uniq0401 grpa50 uniq0501 com3 uniq0601 grpa20 uniq0601"
+	if err := utils.GetGotExpErr("subjects count", len(a.trans.subjects), 10); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	//Com1, grpa10 Com2 uniq0401 grpa50 uniq0501 <coM3> uniq0601 grpa20 uniq0601
+	line := "Com1, grpa10 Com2 uniq0401 grpa50 uniq0501 <coM3> uniq0601 grpa20 uniq0601"
 	exgroup := "com1 grpa10 com2 * grpa50 * com3 * grpa20 *"
 
 	phraseCnt, _, phrasestr, err := a.trans.tokenizeLine(line, 0, cStageElse, 0, 0)
@@ -553,6 +559,14 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 		return
 	}
 	if err := utils.GetGotExpErr("phrasestr", phrasestr, exgroup); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	phraseID := a.trans.phrases.getItemID(phrasestr)
+	subject := a.trans.subjects[phraseID]
+	expectedSub := "Com1, grpa10 Com2 * grpa50 * <coM3> * grpa20 *"
+	if err := utils.GetGotExpErr("subject", subject, expectedSub); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
