@@ -135,7 +135,11 @@ func (t *trans) setBlockSize(blockSize int) {
 		t.phrases.SetBlockSize(blockSize)
 	}
 }
-func (t *trans) calcCountBorder(rate float64) {
+func (t *trans) calcCountBorder(rate float64, termCountBorder int) {
+	if termCountBorder > 0 {
+		t.termCountBorder = termCountBorder
+		return
+	}
 	if rate == 0 {
 		rate = cTermCountBorderRate
 	}
@@ -344,6 +348,9 @@ func (t *trans) sortTokensByCount(tokens []int) ([]int, []int) {
 }
 
 func (t *trans) registerSubject(phraseID int, line string, replaces map[int]string) string {
+	if subject, ok := t.subjects[phraseID]; ok {
+		return subject
+	}
 	if len(replaces) == 0 {
 		t.subjects[phraseID] = line
 		return line
@@ -418,12 +425,11 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 		phrasestr += " " + word
 	}
 	phrasestr = strings.TrimSpace(phrasestr)
-	_, ok := t.phrases.members[phrasestr]
 	phraseID := t.phrases.register(phrasestr, addCnt, lastUpdate, lastUpdate, lastValue, registerItem)
 	if lastUpdate > t.latestUpdate {
 		t.latestUpdate = lastUpdate
 	}
-	if !ok && lastValue != "" {
+	if lastValue != "" {
 		t.registerSubject(phraseID, lastValue, excludesMap)
 	}
 
@@ -624,9 +630,12 @@ func (t *trans) match(text string) bool {
 }
 
 func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64,
-	showLastText bool, termCountBorderRate float64) []phraseScore {
+	showLastText bool,
+	termCountBorderRate float64, termCountBorder int,
+	minMatchRate, maxMatchRate float64) []phraseScore {
 	if termCountBorderRate > 0 {
-		if err := t.rearangePhrases(termCountBorderRate); err != nil {
+		if err := t.rearangePhrases(termCountBorderRate, termCountBorder,
+			minMatchRate, maxMatchRate); err != nil {
 			return nil
 		}
 	}
@@ -711,15 +720,18 @@ func (t *trans) OLDstr2Tokens(line string) []int {
 	return tokens
 }
 
-func (t *trans) rearangePhrases(termCountBorderRate float64) error {
+func (t *trans) rearangePhrases(termCountBorderRate float64, termCountBorder int,
+	minMatchRate, maxMatchRate float64) error {
 	p, err := newItems("", "rearranged_phrase", 0, 0, "", false)
 	if err != nil {
 		return err
 	}
 
+	t.subjects = make(map[int]string)
+
 	// if new termCountBorder is equal or less than current, there will be no change
 	oldTermCountBorder := t.termCountBorder
-	t.calcCountBorder(termCountBorderRate)
+	t.calcCountBorder(termCountBorderRate, termCountBorder)
 	if t.termCountBorder <= oldTermCountBorder {
 		return nil
 	}
@@ -751,7 +763,12 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 			case cStageRegisterPT:
 				t.registerPt(tokens, cnt)
 			case cStageRegisterPhrases:
-				t.registerPhrase(tokens, lastUpdate, lastValue, cnt, 0, 0)
+				t.registerPhrase(tokens, lastUpdate, lastValue, cnt, minMatchRate, maxMatchRate)
+				//_, phrasestr := t.registerPhrase(tokens, lastUpdate, lastValue, cnt, 0, 0)
+				//expected := "invite sip * user phone * udp sip 2.0 * application * sip * user phone from * sip * user phone tag * sip * user phone * max-forwards allow invite ack options bye cancel update * supported * timer * call-id * cseq invite user-agent tbsip contact sip * via sip 2.0 udp * branch * content-length * ip4 * ip4 * rtpmap * --- sip 2.0 * via sip 2.0 udp * branch * sip * user phone from * sip * user phone tag * call-id * cseq invite server * content-length --- sip 2.0 * via sip 2.0 udp * branch * sip 127.0.0.1 ftag * did * sip * ftag * did * sip * from * sip * user phone tag * sip * user phone tag * call-id * cseq invite contact sip * udp user-agent * application * allow invite ack bye cancel options * update * timer supported timer * application * content-length * sip * ip4 * ip4 * rtpmap * --- ack sip * udp sip 2.0 sip * user phone tag * from * sip * user phone tag * max-forwards cseq ack call-id * sip * sip * ftag * did * sip 127.0.0.1 ftag * did * user-agent tbsip via sip 2.0 udp * branch * content-length --- bye sip * udp sip 2.0 sip * user phone tag * from * sip * user phone tag * call-id * cseq bye * sip * sip * ftag * did * sip 127.0.0.1 ftag * did * max-forwards user-agent tbsip via sip 2.0 udp * branch * content-length --- sip 2.0 * via sip 2.0 udp * branch * from * sip * user phone tag * sip * user phone tag * call-id * cseq bye user-agent * allow invite ack bye cancel options * update * supported timer * content-length"
+				//if phrasestr == expected {
+				//	println(t.orgPhrases.memberMap[phraseID])
+				//}
 			}
 		}
 
@@ -770,12 +787,14 @@ func (t *trans) rearangePhrases(termCountBorderRate float64) error {
 	return nil
 }
 
-func (t *trans) outputPhrases(termCountBorderRate float64,
+func (t *trans) outputPhrases(termCountBorderRate float64, termCountBorder int,
 	biggestN int,
+	minMatchRate, maxMatchRate float64,
 	delim, outfile string) error {
 
 	if termCountBorderRate > 0 {
-		if err := t.rearangePhrases(termCountBorderRate); err != nil {
+		if err := t.rearangePhrases(termCountBorderRate, termCountBorder,
+			minMatchRate, maxMatchRate); err != nil {
 			return err
 		}
 	}
@@ -846,7 +865,7 @@ func (t *trans) outputPhrases(termCountBorderRate float64,
 }
 
 func (t *trans) outputPhrasesHistory(
-	termCountBorderRate float64,
+	termCountBorderRate float64, termCountBorder int,
 	minMatchRate, maxMatchRate float64,
 	biggestN int,
 	delim, outdir string) error {
@@ -855,7 +874,8 @@ func (t *trans) outputPhrasesHistory(
 	format := utils.GetDatetimeFormat(t.frequency)
 
 	if termCountBorderRate > 0 {
-		if err := t.rearangePhrases(termCountBorderRate); err != nil {
+		if err := t.rearangePhrases(termCountBorderRate, termCountBorder,
+			minMatchRate, maxMatchRate); err != nil {
 			return err
 		}
 	}
@@ -896,11 +916,17 @@ func (t *trans) outputPhrasesHistory(
 		if err != nil {
 			return err
 		}
+
+		//expected := "invite sip * user phone transport udp sip 2.0 content-type application sdp sip * user phone from * sip * user phone tag * x-pai sip cpc * user phone tel cpc ordinary max-forwards allow invite ack options bye cancel update prack supported 100rel timer session-expires 300 min-se 300 call-id * cseq invite user-agent tbsip contact sip * via sip 2.0 udp 202.173.5.114 branch * content-length 137 * ip4 202.173.5.114 * ip4 202.173.5.114 audio rtp avp * sendrecv * rtpmap pcmu --- sip 2.0 100 giving * try via sip 2.0 udp 202.173.5.114 rport branch * sip * user phone from * sip * user phone tag * call-id * cseq invite server opensips 3.2.9 x86_64 linux content-length --- sip 2.0 200 via sip 2.0 udp 202.173.5.114 rport branch * record-route sip 127.0.0.1 ftag * did * record-route sip 202.173.5.209 ftag * did * record-route sip 202.173.5.198 fend yes from * sip * user phone tag * sip * user phone tag * call-id * cseq invite contact sip * transport udp user-agent freeswitch accept application sdp allow invite ack bye cancel options message info update notify require timer supported timer path replaces allow-events talk hold conference refer session-expires 300 refresher uac content-type application sdp content-disposition session content-length 166 remote-party-id * sip * party calling privacy off screen freeswitch ip4 202.173.5.209 freeswitch ip4 202.173.5.209 audio rtp avp * rtpmap pcmu * ptime --- ack sip * transport udp sip 2.0 sip * user phone tag * from * sip * user phone tag * max-forwards cseq ack call-id * route sip 202.173.5.198 fend yes route sip 202.173.5.209 ftag * did * route sip 127.0.0.1 ftag * did * user-agent tbsip via sip 2.0 udp 202.173.5.114 branch * content-length --- bye sip * transport udp sip 2.0 sip * user phone tag * from * sip * user phone tag * call-id * cseq bye route sip 202.173.5.198 fend yes route sip 202.173.5.209 ftag * did * route sip 127.0.0.1 ftag * did * max-forwards user-agent tbsip via sip 2.0 udp 202.173.5.114 branch * content-length --- sip 2.0 200 via sip 2.0 udp 202.173.5.114 rport branch * from * sip * user phone tag * sip * user phone tag * call-id * cseq bye user-agent freeswitch allow invite ack bye cancel options message info update notify supported timer path replaces content-length"
+		//if item == expected {
+		//	println("here")
+		//}
+
 		tokens, err := t.toTermList(item, lastUpdate, false)
 		if err != nil {
 			return err
 		}
-		phraseID, _ := t.registerPhrase(tokens, lastUpdate, "", 0, minMatchRate, maxMatchRate)
+		phraseID, _ := t.registerPhrase(tokens, lastUpdate, lastValue, 0, minMatchRate, maxMatchRate)
 		if _, ok := rankMap[phraseID]; !ok {
 			continue
 		}

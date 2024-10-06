@@ -43,6 +43,7 @@ var (
 	N                   int
 	M                   int
 	termCountBorderRate float64
+	termCountBorder     int
 	showLastText        bool
 	line                string
 	outputFile          string
@@ -52,6 +53,7 @@ var (
 	keywords            []string
 	_ignorewords        string
 	ignorewords         []string
+	_customPhrases      []string
 )
 
 type config struct {
@@ -66,8 +68,10 @@ type config struct {
 	MinMatchRate        float64  `yaml:"minMatchRate"`
 	MaxMatchRate        float64  `yaml:"maxMatchRate"`
 	TermCountBorderRate float64  `yaml:"termCountBorderRate"`
+	TermCountBorder     int      `yaml:"termCountBorder"`
 	Keywords            []string `yaml:"keywords"`
 	Ignorewords         []string `yaml:"ignorewords"`
+	CustomPhrases       []string `yaml:"phrases"`
 }
 
 func init() {
@@ -88,6 +92,7 @@ func init() {
 	flag.IntVar(&M, "M", 0, "Show ony logs appeared M times in topN mode")
 	flag.Int64Var(&retention, "retention", 0, "Retention in the frequency to show")
 	flag.Float64Var(&termCountBorderRate, "R", 0.999, "Words with less appearance will be replaced by '*'. The border is calculated by this rate.")
+	flag.IntVar(&termCountBorder, "b", 0, "Words with less appearance than this number will be replaced by '*'. If 0, it will be calculated by termCountBorderRate")
 	flag.BoolVar(&showLastText, "showLastText", false, "If show the last text in the phrase group instead of the phrase.")
 	flag.StringVar(&line, "line", "", "Log line to analyze")
 	flag.StringVar(&outputFile, "o", "", "Output file when using -m outputPhrases|outputPhrasesHistory")
@@ -101,6 +106,7 @@ func init() {
 	maxBlocks = 0
 	blockSize = 0
 	retention = 0
+	_customPhrases = nil
 
 	// Parse command line flags
 	//flag.Parse()
@@ -245,6 +251,9 @@ func loadConfig(path string) error {
 	if ignorewords == nil {
 		ignorewords = c.Ignorewords
 	}
+	if _customPhrases == nil {
+		_customPhrases = c.CustomPhrases
+	}
 	return nil
 }
 
@@ -301,7 +310,7 @@ func run() error {
 			maxBlocks, blockSize,
 			retention, frequency,
 			minMatchRate, maxMatchRate,
-			termCountBorderRate,
+			termCountBorderRate, termCountBorder,
 			keywords, ignorewords,
 			readOnly)
 	}
@@ -312,17 +321,17 @@ func run() error {
 	case "feed":
 		err = a.Feed(0)
 	case "detect":
-		err = a.DetectAndShow(M, termCountBorderRate)
+		err = a.DetectAndShow(M, termCountBorderRate, termCountBorder)
 	case "topN":
-		err = a.TopNShow(N, M, int(retention), showLastText, termCountBorderRate)
+		err = a.TopNShow(N, M, int(retention), showLastText, termCountBorderRate, termCountBorder)
 	case "termCounts":
 		err = a.TermCountCountsShow(N)
 	case "analyzeLine":
 		err = a.AnalyzeLine(line)
 	case "outputPhrases":
-		err = a.OutputPhrases(termCountBorderRate, biggestN, delim, outputFile)
+		err = a.OutputPhrases(termCountBorderRate, termCountBorder, biggestN, delim, outputFile)
 	case "outputPhrasesHistory":
-		err = a.OutputPhrasesHistory(termCountBorderRate, biggestN, delim, outputFile)
+		err = a.OutputPhrasesHistory(termCountBorderRate, termCountBorder, biggestN, delim, outputFile)
 	default:
 		err = errors.New("-m: mode must be one of topN|detect|feed|termCounts|analyzeLine|outputPhrases|outputPhrasesHistory|clean")
 	}

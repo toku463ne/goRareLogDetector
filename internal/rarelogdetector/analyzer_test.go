@@ -21,7 +21,7 @@ func Test_Analyzer_Run(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, nil, nil, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -72,7 +72,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, nil, nil, false)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -110,13 +110,13 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, nil, nil, true)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
-	results, err := a.Detect(0.5)
+	results, err := a.Detect(0.5, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -149,7 +149,7 @@ func Test_Analyzer_Run2(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0.8, 0, nil, nil, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0.8, 0, 0, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -197,7 +197,7 @@ func Test_Analyzer_TopN(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, nil, nil, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -216,7 +216,7 @@ func Test_Analyzer_TopN(t *testing.T) {
 		return
 	}
 
-	res, err := a.TopN(10, 20, 100, false, 0)
+	res, err := a.TopN(10, 20, 100, false, 0, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -244,13 +244,13 @@ func Test_Analyzer_TopN(t *testing.T) {
 
 	a.Close()
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, nil, nil, false)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
-	res, err = a.TopN(10, 20, 100, false, 0.5)
+	res, err = a.TopN(10, 20, 100, false, 0.5, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -278,7 +278,7 @@ func Test_Analyzer_YearDay(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 0, 0, 5, "day", 0, 0, 0, nil, nil, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 0, 0, 5, "day", 0, 0, 0, 0, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -319,7 +319,7 @@ func Test_Analyzer_Hourly(t *testing.T) {
 	layout := "2006-07-02 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 10, "hour", 0, 0, 0, nil, nil, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 10, "hour", 0, 0, 0, 0, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -400,7 +400,7 @@ func Test_Analyzer_Hourly(t *testing.T) {
 	}
 
 	// OutputPhrases test
-	if err := a.OutputPhrases(0.5, 0, ",", testDir+"/phrases.csv"); err != nil {
+	if err := a.OutputPhrases(0.5, 0, 0, ",", testDir+"/phrases.csv"); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -425,7 +425,7 @@ func Test_Analyzer_Hourly(t *testing.T) {
 	}
 
 	// OutputPhrasesHistory test
-	if err := a.OutputPhrasesHistory(0.5, 10, ",", testDir+"/out"); err != nil {
+	if err := a.OutputPhrasesHistory(0.5, 0, 10, ",", testDir+"/out"); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -468,7 +468,7 @@ func Test_Analyzer_keywords(t *testing.T) {
 
 	keywords := []string{"uniq003", "uniq008"}
 	ignorewords := []string{"grp1a", "grp1b"}
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 10, "", 0, 0, 0,
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
 		keywords, ignorewords, false)
 	if err != nil {
 		t.Errorf("%v", err)
@@ -510,7 +510,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 
 	logPath := "../../test/data/rarelogdetector/analyzer/changablephrases.log*"
 	dataDir := testDir + "/data"
-	a, err := NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0,
+	a, err := NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
 		nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
@@ -572,7 +572,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 	}
 
 	a.Close()
-	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0,
+	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
 		nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
@@ -580,7 +580,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 	}
 
 	a.Close()
-	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0,
+	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
 		nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
@@ -591,7 +591,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 	exgroup = "com1 grpe10 com2 * grpa50 * com3 * grpc20 *"
 
 	// rearange will not change with this rate
-	err = a.trans.rearangePhrases(0.8)
+	err = a.trans.rearangePhrases(0.8, 0, 0, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -611,7 +611,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 	}
 
 	a.Close()
-	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0,
+	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
 		nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
@@ -619,7 +619,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 	}
 
 	// grpa*10 will be converted to "*"
-	err = a.trans.rearangePhrases(0.6)
+	err = a.trans.rearangePhrases(0.6, 0, 0, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -642,7 +642,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 	}
 
 	a.Close()
-	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0,
+	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
 		nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
@@ -650,7 +650,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 	}
 
 	// grpa*10 will be converted to "*"
-	err = a.trans.rearangePhrases(0.5)
+	err = a.trans.rearangePhrases(0.5, 0, 0, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return

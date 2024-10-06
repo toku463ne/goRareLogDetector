@@ -37,6 +37,7 @@ type Analyzer struct {
 	minMatchRate        float64
 	maxMatchRate        float64
 	termCountBorderRate float64
+	termCountBorder     int
 	keywords            []string
 	ignorewords         []string
 }
@@ -60,6 +61,7 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	retention int64, frequency string,
 	minMatchRate, maxMatchRate float64,
 	termCountBorderRate float64,
+	termCountBorder int,
 	keywords, ignorewords []string,
 	readOnly bool) (*Analyzer, error) {
 	a := new(Analyzer)
@@ -88,6 +90,7 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	a.keywords = keywords
 	a.ignorewords = ignorewords
 
+	a.termCountBorder = termCountBorder
 	if termCountBorderRate == 0 {
 		a.termCountBorderRate = cTermCountBorderRate
 	} else {
@@ -269,6 +272,7 @@ func (a *Analyzer) loadStatus() error {
 		&a.retention, &a.frequency,
 		&a.minMatchRate, &a.maxMatchRate,
 		&a.termCountBorderRate,
+		&a.termCountBorder,
 		&a.logFormat); err != nil {
 		return err
 	}
@@ -356,6 +360,7 @@ func (a *Analyzer) saveConfig() error {
 		"minMatchRate":        a.minMatchRate,
 		"maxMatchRate":        a.maxMatchRate,
 		"termCountBorderRate": a.termCountBorderRate,
+		"termCountBorder":     a.termCountBorder,
 		"logFormat":           a.logFormat,
 	}); err != nil {
 		return err
@@ -480,7 +485,7 @@ func (a *Analyzer) Feed(targetLinesCnt int) error {
 	return nil
 }
 
-func (a *Analyzer) Detect(termCountBorderRate float64) ([]phraseCnt, error) {
+func (a *Analyzer) Detect(termCountBorderRate float64, termCountBorder int) ([]phraseCnt, error) {
 	logrus.Debug("Starting term registration")
 	if _, err := a._run(0, cStageRegisterTerms, false); err != nil {
 		return nil, err
@@ -507,7 +512,7 @@ func (a *Analyzer) Detect(termCountBorderRate float64) ([]phraseCnt, error) {
 
 	// in case different termCountBorderRate is specified, rearange phrases again
 	if termCountBorderRate > 0 {
-		a.trans.rearangePhrases(termCountBorderRate)
+		a.trans.rearangePhrases(termCountBorderRate, termCountBorder, a.minMatchRate, a.maxMatchRate)
 	}
 	p := a.trans.phrases
 	for i := range results {
@@ -520,8 +525,8 @@ func (a *Analyzer) Detect(termCountBorderRate float64) ([]phraseCnt, error) {
 	return results, nil
 }
 
-func (a *Analyzer) DetectAndShow(M int, termCountBorderRate float64) error {
-	results, err := a.Detect(termCountBorderRate)
+func (a *Analyzer) DetectAndShow(M int, termCountBorderRate float64, termCountBorder int) error {
+	results, err := a.Detect(termCountBorderRate, termCountBorder)
 	if err != nil {
 		return err
 	}
@@ -535,21 +540,25 @@ func (a *Analyzer) DetectAndShow(M int, termCountBorderRate float64) error {
 }
 
 func (a *Analyzer) TopN(N, minCnt, days int,
-	showLastText bool, termCountBorderRate float64) ([]phraseScore, error) {
+	showLastText bool,
+	termCountBorderRate float64, termCountBorder int) ([]phraseScore, error) {
 	if err := a.Feed(0); err != nil {
 		return nil, err
 	}
 	maxLastUpdate := utils.AddDaysToEpoch(a.trans.latestUpdate, -N)
-	phraseScores := a.trans.getTopNScores(N, minCnt, maxLastUpdate, showLastText, termCountBorderRate)
+	phraseScores := a.trans.getTopNScores(N, minCnt, maxLastUpdate, showLastText,
+		termCountBorderRate, termCountBorder,
+		a.minMatchRate, a.maxMatchRate)
 
 	return phraseScores, nil
 }
 
 func (a *Analyzer) TopNShow(N, minCnt, days int,
-	showLastText bool, termCountBorderRate float64) error {
+	showLastText bool,
+	termCountBorderRate float64, termCountBorder int) error {
 	var err error
 	var phraseScores []phraseScore
-	phraseScores, err = a.TopN(N, minCnt, days, showLastText, termCountBorderRate)
+	phraseScores, err = a.TopN(N, minCnt, days, showLastText, termCountBorderRate, termCountBorder)
 	if err != nil {
 		return err
 	}
@@ -609,25 +618,28 @@ func (a *Analyzer) TermCountCountsShow(N int) error {
 	return nil
 }
 
-func (a *Analyzer) OutputPhrases(termCountBorderRate float64,
+func (a *Analyzer) OutputPhrases(termCountBorderRate float64, termCountBorder int,
 	biggestN int,
 	delim, outfile string) error {
 	if termCountBorderRate == 0 {
 		termCountBorderRate = a.termCountBorderRate
 	}
-	if err := a.trans.outputPhrases(termCountBorderRate, biggestN, delim, outfile); err != nil {
+	if err := a.trans.outputPhrases(termCountBorderRate, termCountBorder,
+		biggestN,
+		a.minMatchRate, a.maxMatchRate,
+		delim, outfile); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (a *Analyzer) OutputPhrasesHistory(termCountBorderRate float64,
+func (a *Analyzer) OutputPhrasesHistory(termCountBorderRate float64, termCountBorder int,
 	biggestN int,
 	delim, outfile string) error {
 	if termCountBorderRate == 0 {
 		termCountBorderRate = a.termCountBorderRate
 	}
-	if err := a.trans.outputPhrasesHistory(termCountBorderRate,
+	if err := a.trans.outputPhrasesHistory(termCountBorderRate, termCountBorder,
 		a.minMatchRate, a.maxMatchRate,
 		biggestN,
 		delim, outfile); err != nil {
@@ -692,7 +704,7 @@ func (a *Analyzer) _run(targetLinesCnt int,
 
 	switch stage {
 	case cStageRegisterTerms:
-		a.trans.calcCountBorder(a.termCountBorderRate)
+		a.trans.calcCountBorder(a.termCountBorderRate, a.termCountBorder)
 	case cStageRegisterPT:
 		a.trans.ptRegistered = true
 	case cStageRegisterPhrases:

@@ -32,7 +32,7 @@ func Test_main_config(t *testing.T) {
 		return
 	}
 
-	res, err := a.TopN(5, 10, 7, false, 0)
+	res, err := a.TopN(5, 10, 7, false, 0, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -74,7 +74,7 @@ func Test_real_sugcap(t *testing.T) {
 func Test_real_sugcap2(t *testing.T) {
 	//conf := "/home/ubuntu/logandata/openvpn.yml"
 	conf := "/home/administrator/tests/sugcap2/sugcap.yml"
-	os.Args = []string{"rarelog", "-m", "outputPhrasesHistory", "-c", conf, "-biggestN", "1", "-R", "0.6", "-o", "/tmp/out"}
+	os.Args = []string{"rarelog", "-m", "outputPhrasesHistory", "-c", conf, "-biggestN", "5", "-R", "0.6", "-o", "/tmp/out"}
 	main()
 }
 
