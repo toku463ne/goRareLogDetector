@@ -45,6 +45,7 @@ type trans struct {
 	keyTermIds          map[int]string
 	ignorewords         map[string]string
 	pt                  *phraseTree
+	customPt            *phraseTree
 }
 
 type phraseScore struct {
@@ -203,8 +204,7 @@ func (t *trans) commit(completed bool) error {
 }
 
 func (t *trans) calcPhrasesScore() error {
-	var te *items
-	te = t.terms
+	te := t.terms
 	p := *t.phrases
 	phraseScores := make(map[int]float64, 0)
 	for phraseID, line := range p.memberMap {
@@ -267,6 +267,13 @@ func (t *trans) registerPt(tokens []int, addCnt int) {
 	}
 }
 
+func (t *trans) registerCustomPt(tokens []int, addCnt int) {
+	pt := t.customPt
+	for _, termID := range tokens {
+		pt, _ = t.registerPtNode(termID, pt, addCnt)
+	}
+}
+
 func (t *trans) OLDregisterPt(tokens []int, addCnt int) {
 	pt := t.pt
 	sortedTerms, sortedCounts := t.sortTokensByCount(tokens)
@@ -313,6 +320,21 @@ func (t *trans) searchPt(tokens []int, minLen, maxLen int) (int, int) {
 	} else {
 		return -1, -1
 	}
+}
+
+func (t *trans) customPtExists(tokens []int) bool {
+	pt := t.customPt
+	ok := true
+	for _, termID := range tokens {
+		if pt.childNodes == nil {
+			return false
+		}
+		pt, ok = pt.childNodes[termID]
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (t *trans) sortTokensByCount(tokens []int) ([]int, []int) {
