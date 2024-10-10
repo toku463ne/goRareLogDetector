@@ -21,7 +21,7 @@ func Test_Analyzer_Run(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -72,7 +72,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, false)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -110,7 +110,7 @@ func Test_Analyzer_Run(t *testing.T) {
 		return
 	}
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, true)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, nil, true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -149,7 +149,7 @@ func Test_Analyzer_Run2(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0.8, 0, 0, nil, nil, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0.8, 0, 0, nil, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -176,7 +176,7 @@ func Test_Analyzer_Run2(t *testing.T) {
 		return
 	}
 
-	phraseID := a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 *")
+	phraseID := a.trans.phrases.getItemID("comterm1 comterm2 comterm3 comterm4 comterm5 comterm6 comterm7 comterm8 * *")
 	phraseCnt := a.trans.phrases.getCount(phraseID)
 	if err := utils.GetGotExpErr("phrase count", phraseCnt, 20); err != nil {
 		t.Errorf("%v", err)
@@ -197,7 +197,7 @@ func Test_Analyzer_TopN(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -244,7 +244,7 @@ func Test_Analyzer_TopN(t *testing.T) {
 
 	a.Close()
 
-	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, false)
+	a, err = NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 0, "", 0, 0, 0, 0, nil, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -278,7 +278,7 @@ func Test_Analyzer_YearDay(t *testing.T) {
 	layout := "Jan 2 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 0, 0, 5, "day", 0, 0, 0, 0, nil, nil, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 0, 0, 5, "day", 0, 0, 0, 0, nil, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -319,7 +319,7 @@ func Test_Analyzer_Hourly(t *testing.T) {
 	layout := "2006-07-02 15:04:05"
 	dataDir := testDir + "/data"
 
-	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 10, "hour", 0, 0, 0, 0, nil, nil, false)
+	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 10, "hour", 0, 0, 0, 0, nil, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -469,7 +469,7 @@ func Test_Analyzer_keywords(t *testing.T) {
 	keywords := []string{"uniq003", "uniq008"}
 	ignorewords := []string{"grp1a", "grp1b"}
 	a, err := NewAnalyzer(dataDir, logPath, logFormat, layout, nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
-		keywords, ignorewords, false)
+		keywords, ignorewords, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -511,7 +511,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 	logPath := "../../test/data/rarelogdetector/analyzer/changablephrases.log*"
 	dataDir := testDir + "/data"
 	a, err := NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
-		nil, nil, false)
+		nil, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -573,7 +573,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 
 	a.Close()
 	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
-		nil, nil, false)
+		nil, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -581,7 +581,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 
 	a.Close()
 	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
-		nil, nil, false)
+		nil, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -612,7 +612,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 
 	a.Close()
 	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
-		nil, nil, false)
+		nil, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -643,7 +643,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 
 	a.Close()
 	a, err = NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
-		nil, nil, false)
+		nil, nil, nil, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -657,7 +657,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 	}
 
 	line = "com1 grpa10 com2 uniq0401 grpa50 uniq0501 com3 uniq0601 grpa20 uniq0601"
-	exgroup = "com1 * com2 * grpa50 * com3 *"
+	exgroup = "com1 * com2 * grpa50 * com3 * * *"
 	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, cStageElse, 0, 0)
 	if err != nil {
 		t.Errorf("%v", err)
@@ -669,6 +669,55 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 	}
 	if err := utils.GetGotExpErr("phrasestr", phrasestr, exgroup); err != nil {
 		t.Errorf("%v", err)
+		return
+	}
+
+}
+
+func Test_Analyzer_customPhrases(t *testing.T) {
+	testDir, err := utils.InitTestDir("Test_Analyzer_customPhrases")
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	logPath := "../../test/data/rarelogdetector/analyzer/changablephrases.log*"
+	dataDir := testDir + "/data"
+	a, err := NewAnalyzer(dataDir, logPath, "", "", nil, nil, 100, 100, 10, "", 0, 0, 0, 0,
+		nil, nil, []string{
+			"Com1, * Com2 * grpa50 * <coM3> * grpa20 *",
+		}, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if err := a.Feed(0); err != nil {
+		t.Errorf("%v", err)
+		return
+	} else {
+		if err := utils.GetGotExpErr("lines processed", a.linesProcessed, 100); err != nil {
+			t.Errorf("%v", err)
+			return
+		}
+	}
+
+	if err := a.trans.rearangePhrases(0, 21, 0, 0); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	s := 0
+	for _, v := range a.trans.phrases.counts {
+		s += v
+	}
+	if err := utils.GetGotExpErr("total count", s, 100); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	if _, ok := a.trans.phrases.members["com1 * com2 * grpa50 * com3 * grpa20 *"]; !ok {
+		t.Error("custome phrase not registered")
 		return
 	}
 

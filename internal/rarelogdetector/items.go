@@ -20,6 +20,7 @@ type items struct {
 	lastUpdates      map[int]int64
 	lastUpdate       int64
 	lastValues       map[int]string
+	tokensMap        map[int][]int
 	currCounts       map[int]int
 	currUpdates      map[int]int64
 	currCreateEpochs map[int]int64
@@ -46,6 +47,7 @@ func newItems(dataDir, name string, maxBlocks int,
 	i.currUpdates = make(map[int]int64, 10000)
 	i.currCreateEpochs = make(map[int]int64, 10000)
 	i.lastValues = make(map[int]string, 10000)
+	i.tokensMap = make(map[int][]int, 0)
 	i.maxItemID = 0
 
 	return i, nil
@@ -119,6 +121,22 @@ func (i *items) register(item string, addCount int,
 	}
 	i.totalCount += addCount
 	return itemID
+}
+
+func (i *items) update(itemID int, addCount int, lastUpdate int64, lastValue string, isNew bool) {
+	var createEpoch int64
+	i.counts[itemID] += addCount
+	i.lastUpdates[itemID] = lastUpdate
+	if lastUpdate < i.createEpochs[itemID] {
+		createEpoch = lastUpdate
+	}
+	i.createEpochs[itemID] = createEpoch
+
+	if isNew {
+		i.currCounts[itemID] += addCount
+		i.currUpdates[itemID] = lastUpdate
+		i.currCreateEpochs[itemID] = createEpoch
+	}
 }
 
 func (i *items) getMember(itemID int) string {

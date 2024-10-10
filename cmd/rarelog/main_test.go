@@ -32,7 +32,7 @@ func Test_main_config(t *testing.T) {
 		return
 	}
 
-	res, err := a.TopN(5, 10, 7, false, 0, 0)
+	res, err := a.TopN(5, 10, 7, true, 0, 0)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -45,7 +45,7 @@ func Test_main_config(t *testing.T) {
 		t.Errorf("%v", err)
 		return
 	}
-	if err := utils.GetGotExpErr("topN 1", res[1].Count, 7); err != nil {
+	if err := utils.GetGotExpErr("topN 1", res[2].Count, 7); err != nil {
 		t.Errorf("%v", err)
 		return
 	}

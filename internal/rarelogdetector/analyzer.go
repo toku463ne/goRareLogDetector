@@ -40,6 +40,7 @@ type Analyzer struct {
 	termCountBorder     int
 	keywords            []string
 	ignorewords         []string
+	customPhrases       []string
 }
 
 type phraseCnt struct {
@@ -62,7 +63,7 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	minMatchRate, maxMatchRate float64,
 	termCountBorderRate float64,
 	termCountBorder int,
-	keywords, ignorewords []string,
+	keywords, ignorewords, customPhrases []string,
 	readOnly bool) (*Analyzer, error) {
 	a := new(Analyzer)
 	a.dataDir = dataDir
@@ -89,6 +90,7 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 	}
 	a.keywords = keywords
 	a.ignorewords = ignorewords
+	a.customPhrases = customPhrases
 
 	a.termCountBorder = termCountBorder
 	if termCountBorderRate == 0 {
@@ -246,7 +248,7 @@ func (a *Analyzer) init() error {
 		a.retention, a.frequency,
 		a.termCountBorderRate,
 		a.filterRe, a.xFilterRe,
-		a.keywords, a.ignorewords,
+		a.keywords, a.ignorewords, a.customPhrases,
 		true, a.readOnly)
 	if err != nil {
 		return err
@@ -516,7 +518,7 @@ func (a *Analyzer) Detect(termCountBorderRate float64, termCountBorder int) ([]p
 	}
 	p := a.trans.phrases
 	for i := range results {
-		phraseID, phraseStr := a.trans.registerPhrase(results[i].tokens, 0, "", 0, a.minMatchRate, a.maxMatchRate)
+		phraseID, phraseStr := a.trans.registerPhrase(results[i].tokens, 0, "", 0, a.minMatchRate, a.maxMatchRate, true)
 		results[i].count = p.getCount(phraseID)
 		results[i].phrasestr = phraseStr
 	}

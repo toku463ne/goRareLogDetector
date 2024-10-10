@@ -18,6 +18,7 @@ type trans struct {
 	terms               *items
 	phrases             *items
 	orgPhrases          *items
+	customPhrases       *items
 	phraseScores        map[int]float64
 	subjects            map[int]string
 	replacer            *strings.Replacer
@@ -45,7 +46,6 @@ type trans struct {
 	keyTermIds          map[int]string
 	ignorewords         map[string]string
 	pt                  *phraseTree
-	customPt            *phraseTree
 }
 
 type phraseScore struct {
@@ -67,7 +67,7 @@ func newTrans(dataDir, logFormat, timestampLayout string,
 	retention int64, frequency string,
 	termCountBorderRate float64,
 	filterRe, xFilterRe []*regexp.Regexp,
-	_keywords []string, _ignorewords []string,
+	_keywords []string, _ignorewords []string, _customPhrases []string,
 	useGzip, readOnly bool) (*trans, error) {
 	t := new(trans)
 	te, err := newItems(dataDir, "terms", maxBlocks, retention, frequency, useGzip)
@@ -112,6 +112,16 @@ func newTrans(dataDir, logFormat, timestampLayout string,
 	t.pt = &phraseTree{
 		count:      0,
 		childNodes: nil,
+	}
+
+	t.customPhrases, err = newItems("", "customPhrases", 0, 0, "", false)
+	if err != nil {
+		return nil, err
+	}
+	for _, phrase := range _customPhrases {
+		if err := t.registerCustomPhrase(phrase, 0, 0, 0, ""); err != nil {
+			return nil, err
+		}
 	}
 
 	//t.maxDays = maxDays
@@ -235,6 +245,53 @@ func (t *trans) calcPhrasesScore() error {
 	return nil
 }
 
+func (t *trans) registerCustomPhrase(phrase string, addCount int,
+	createEpoch int64, lastUpdate int64, lastValue string) error {
+	cp := t.customPhrases
+	if cpID, ok := cp.members[phrase]; ok {
+		cp.counts[cpID] += addCount
+		return nil
+	}
+	if tokens, err := t.toTermList(phrase, 0, false); err != nil {
+		return err
+	} else {
+		cID := cp.register(phrase, addCount, createEpoch, lastUpdate, lastValue, false)
+		cp.tokensMap[cID] = tokens
+	}
+	return nil
+}
+
+func (t *trans) resetCustomPhrases() {
+	cp := t.customPhrases
+	for cID := range cp.memberMap {
+		cp.counts[cID] = 0
+	}
+}
+
+func (t *trans) searchCustomPhrase(tokens []int) int {
+	cp := t.customPhrases
+	if cp.maxItemID <= 0 {
+		return -1
+	}
+	for cpID, ctokens := range cp.tokensMap {
+		found := true
+		if len(ctokens) == len(tokens) {
+			for i, termID := range tokens {
+				if ctokens[i] != cAsteriskItemID && ctokens[i] != termID {
+					found = false
+					break
+				}
+			}
+		} else {
+			found = false
+		}
+		if found {
+			return cpID
+		}
+	}
+	return -1
+}
+
 func (t *trans) registerPtNode(termID int, pt *phraseTree, addCnt int) (*phraseTree, bool) {
 	if pt.childNodes == nil {
 		pt.childNodes = make(map[int]*phraseTree)
@@ -263,13 +320,6 @@ func (t *trans) registerPt(tokens []int, addCnt int) {
 		if termID == cAsteriskItemID {
 			continue
 		}
-		pt, _ = t.registerPtNode(termID, pt, addCnt)
-	}
-}
-
-func (t *trans) registerCustomPt(tokens []int, addCnt int) {
-	pt := t.customPt
-	for _, termID := range tokens {
 		pt, _ = t.registerPtNode(termID, pt, addCnt)
 	}
 }
@@ -320,21 +370,6 @@ func (t *trans) searchPt(tokens []int, minLen, maxLen int) (int, int) {
 	} else {
 		return -1, -1
 	}
-}
-
-func (t *trans) customPtExists(tokens []int) bool {
-	pt := t.customPt
-	ok := true
-	for _, termID := range tokens {
-		if pt.childNodes == nil {
-			return false
-		}
-		pt, ok = pt.childNodes[termID]
-		if !ok {
-			return false
-		}
-	}
-	return true
 }
 
 func (t *trans) sortTokensByCount(tokens []int) ([]int, []int) {
@@ -392,7 +427,7 @@ func (t *trans) registerSubject(phraseID int, line string, replaces map[int]stri
 }
 
 func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
-	addCnt int, minMatchRate, maxMatchRate float64) (int, string) {
+	addCnt int, minMatchRate, maxMatchRate float64, useCustomPhrase bool) (int, string) {
 	te := t.terms
 	n := len(tokens)
 	excludesMap := make(map[int]string)
@@ -403,36 +438,48 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 		counts[i] = te.getCount(itemID)
 	}
 
-	maxLen := 0
-	minLen := 3
-	if n > 3 {
-		if minMatchRate > 0 {
-			minLen = int(math.Floor(float64(n) * minMatchRate))
+	cID := -1
+	if useCustomPhrase {
+		cID = t.searchCustomPhrase(tokens)
+		if cID > 0 {
+			//t.customPhrases.update(cID, addCnt, lastUpdate, lastValue, false)
+			phrase = t.customPhrases.tokensMap[cID]
 		}
-		maxLen = int(math.Floor(float64(n) * maxMatchRate))
 	}
-	minCnt, pos := t.searchPt(tokens, minLen, maxLen)
 
-	lastToken := 0
-	if pos >= minLen {
-		for i, count := range counts {
-			termID := tokens[i]
-			_, ok := t.keyTermIds[termID]
-			if ok || count >= minCnt {
-				phrase = append(phrase, termID)
-				lastToken = termID
-			} else {
-				if lastToken != cAsteriskItemID {
+	if cID == -1 {
+		maxLen := 0
+		minLen := 3
+		if n > 3 {
+			if minMatchRate > 0 {
+				minLen = int(math.Floor(float64(n) * minMatchRate))
+			}
+			maxLen = int(math.Floor(float64(n) * maxMatchRate))
+		}
+		minCnt, pos := t.searchPt(tokens, minLen, maxLen)
+
+		//lastToken := 0
+		if pos >= minLen {
+			for i, count := range counts {
+				termID := tokens[i]
+				_, ok := t.keyTermIds[termID]
+				if ok || count >= minCnt {
+					phrase = append(phrase, termID)
+					//lastToken = termID
+				} else {
+					//if lastToken != cAsteriskItemID {
+					//	phrase = append(phrase, cAsteriskItemID)
+					//	lastToken = cAsteriskItemID
+					//}
 					phrase = append(phrase, cAsteriskItemID)
-					lastToken = cAsteriskItemID
-				}
-				if termID != cAsteriskItemID {
-					excludesMap[termID] = t.terms.getMember(termID)
+					if termID != cAsteriskItemID {
+						excludesMap[termID] = t.terms.getMember(termID)
+					}
 				}
 			}
+		} else {
+			phrase = tokens
 		}
-	} else {
-		phrase = tokens
 	}
 
 	registerItem := false
@@ -507,7 +554,8 @@ func (t *trans) toTermList(line string,
 			if keyOK {
 				t.keyTermIds[termID] = ""
 			}
-		} else if word == "*" && len(tokens) > 1 && tokens[len(tokens)-1] != cAsteriskItemID {
+			//} else if word == "*" && len(tokens) > 1 && tokens[len(tokens)-1] != cAsteriskItemID {
+		} else if word == "*" {
 			tokens = append(tokens, cAsteriskItemID)
 		}
 	}
@@ -597,11 +645,11 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, stage int,
 			return -1, nil, "", errors.New("phrase tree not registered")
 		}
 		phraseID := -1
-		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, 1, minMatchRate, maxMatchRate)
+		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, 1, minMatchRate, maxMatchRate, false)
 		phraseCnt = t.phrases.getCount(phraseID)
 	default:
 		phraseID := -1
-		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, 0, minMatchRate, maxMatchRate)
+		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, 0, minMatchRate, maxMatchRate, false)
 		phraseCnt = t.phrases.getCount(phraseID)
 	}
 
@@ -655,11 +703,10 @@ func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64,
 	showLastText bool,
 	termCountBorderRate float64, termCountBorder int,
 	minMatchRate, maxMatchRate float64) []phraseScore {
-	if termCountBorderRate > 0 {
-		if err := t.rearangePhrases(termCountBorderRate, termCountBorder,
-			minMatchRate, maxMatchRate); err != nil {
-			return nil
-		}
+
+	if err := t.rearangePhrases(termCountBorderRate, termCountBorder,
+		minMatchRate, maxMatchRate); err != nil {
+		return nil
 	}
 
 	phraseScores := t.phraseScores
@@ -726,9 +773,11 @@ func (t *trans) OLDstr2Tokens(line string) []int {
 		termID := t.terms.getItemID(term)
 		termCnt := t.terms.getCount(termID)
 
-		if termCnt >= t.termCountBorder || (len(tokens) > 0 && termID == cAsteriskItemID && tokens[len(tokens)-1] != cAsteriskItemID) {
+		//if termCnt >= t.termCountBorder || (len(tokens) > 0 && termID == cAsteriskItemID && tokens[len(tokens)-1] != cAsteriskItemID) {
+		if termCnt >= t.termCountBorder || (len(tokens) > 0 && termID == cAsteriskItemID) {
 			tokens = append(tokens, termID)
-		} else if len(tokens) > 0 && termCnt < t.termCountBorder && tokens[len(tokens)-1] != cAsteriskItemID {
+			//} else if len(tokens) > 0 && termCnt < t.termCountBorder && tokens[len(tokens)-1] != cAsteriskItemID {
+		} else if len(tokens) > 0 && termCnt < t.termCountBorder {
 			tokens = append(tokens, cAsteriskItemID)
 		} else {
 			excluded_words[term] = ""
@@ -744,6 +793,11 @@ func (t *trans) OLDstr2Tokens(line string) []int {
 
 func (t *trans) rearangePhrases(termCountBorderRate float64, termCountBorder int,
 	minMatchRate, maxMatchRate float64) error {
+
+	if termCountBorderRate <= 0 && termCountBorder <= 0 {
+		return nil
+	}
+
 	p, err := newItems("", "rearranged_phrase", 0, 0, "", false)
 	if err != nil {
 		return err
@@ -767,6 +821,8 @@ func (t *trans) rearangePhrases(termCountBorderRate float64, termCountBorder int
 	t.orgPhrases = t.phrases
 	t.phrases = p
 
+	t.resetCustomPhrases()
+
 	for _, stage := range []int{cStageRegisterPT, cStageRegisterPhrases} {
 		for phraseID, line := range t.orgPhrases.memberMap {
 			cnt := t.orgPhrases.getCount(phraseID)
@@ -785,7 +841,7 @@ func (t *trans) rearangePhrases(termCountBorderRate float64, termCountBorder int
 			case cStageRegisterPT:
 				t.registerPt(tokens, cnt)
 			case cStageRegisterPhrases:
-				t.registerPhrase(tokens, lastUpdate, lastValue, cnt, minMatchRate, maxMatchRate)
+				t.registerPhrase(tokens, lastUpdate, lastValue, cnt, minMatchRate, maxMatchRate, true)
 				//_, phrasestr := t.registerPhrase(tokens, lastUpdate, lastValue, cnt, 0, 0)
 				//expected := "invite sip * user phone * udp sip 2.0 * application * sip * user phone from * sip * user phone tag * sip * user phone * max-forwards allow invite ack options bye cancel update * supported * timer * call-id * cseq invite user-agent tbsip contact sip * via sip 2.0 udp * branch * content-length * ip4 * ip4 * rtpmap * --- sip 2.0 * via sip 2.0 udp * branch * sip * user phone from * sip * user phone tag * call-id * cseq invite server * content-length --- sip 2.0 * via sip 2.0 udp * branch * sip 127.0.0.1 ftag * did * sip * ftag * did * sip * from * sip * user phone tag * sip * user phone tag * call-id * cseq invite contact sip * udp user-agent * application * allow invite ack bye cancel options * update * timer supported timer * application * content-length * sip * ip4 * ip4 * rtpmap * --- ack sip * udp sip 2.0 sip * user phone tag * from * sip * user phone tag * max-forwards cseq ack call-id * sip * sip * ftag * did * sip 127.0.0.1 ftag * did * user-agent tbsip via sip 2.0 udp * branch * content-length --- bye sip * udp sip 2.0 sip * user phone tag * from * sip * user phone tag * call-id * cseq bye * sip * sip * ftag * did * sip 127.0.0.1 ftag * did * max-forwards user-agent tbsip via sip 2.0 udp * branch * content-length --- sip 2.0 * via sip 2.0 udp * branch * from * sip * user phone tag * sip * user phone tag * call-id * cseq bye user-agent * allow invite ack bye cancel options * update * supported timer * content-length"
 				//if phrasestr == expected {
@@ -814,11 +870,9 @@ func (t *trans) outputPhrases(termCountBorderRate float64, termCountBorder int,
 	minMatchRate, maxMatchRate float64,
 	delim, outfile string) error {
 
-	if termCountBorderRate > 0 {
-		if err := t.rearangePhrases(termCountBorderRate, termCountBorder,
-			minMatchRate, maxMatchRate); err != nil {
-			return err
-		}
+	if err := t.rearangePhrases(termCountBorderRate, termCountBorder,
+		minMatchRate, maxMatchRate); err != nil {
+		return err
 	}
 
 	phraseRanks := t.phrases.biggestNItems(biggestN)
@@ -895,11 +949,9 @@ func (t *trans) outputPhrasesHistory(
 	unitsecs := utils.GetUnitsecs(t.frequency)
 	format := utils.GetDatetimeFormat(t.frequency)
 
-	if termCountBorderRate > 0 {
-		if err := t.rearangePhrases(termCountBorderRate, termCountBorder,
-			minMatchRate, maxMatchRate); err != nil {
-			return err
-		}
+	if err := t.rearangePhrases(termCountBorderRate, termCountBorder,
+		minMatchRate, maxMatchRate); err != nil {
+		return err
 	}
 
 	phraseRanks := t.phrases.biggestNItems(biggestN)
@@ -948,7 +1000,8 @@ func (t *trans) outputPhrasesHistory(
 		if err != nil {
 			return err
 		}
-		phraseID, _ := t.registerPhrase(tokens, lastUpdate, lastValue, 0, minMatchRate, maxMatchRate)
+
+		phraseID, _ := t.registerPhrase(tokens, lastUpdate, lastValue, 0, minMatchRate, maxMatchRate, true)
 		if _, ok := rankMap[phraseID]; !ok {
 			continue
 		}
@@ -1004,7 +1057,7 @@ func (t *trans) outputPhrasesHistory(
 	// Pretty print header (adjust for pretty output to stdout)
 	if outdir == "" {
 		fmt.Printf("%-20s", "time")
-		for i, _ := range phraseRanks {
+		for i := range phraseRanks {
 			fmt.Printf("%-15s", strconv.Itoa(i+1)+".count")
 		}
 		fmt.Println()

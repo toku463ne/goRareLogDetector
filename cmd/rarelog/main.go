@@ -53,7 +53,7 @@ var (
 	keywords            []string
 	_ignorewords        string
 	ignorewords         []string
-	_customPhrases      []string
+	customPhrases       []string
 )
 
 type config struct {
@@ -106,7 +106,7 @@ func init() {
 	maxBlocks = 0
 	blockSize = 0
 	retention = 0
-	_customPhrases = nil
+	customPhrases = nil
 
 	// Parse command line flags
 	//flag.Parse()
@@ -251,8 +251,8 @@ func loadConfig(path string) error {
 	if ignorewords == nil {
 		ignorewords = c.Ignorewords
 	}
-	if _customPhrases == nil {
-		_customPhrases = c.CustomPhrases
+	if customPhrases == nil {
+		customPhrases = c.CustomPhrases
 	}
 	return nil
 }
@@ -311,7 +311,7 @@ func run() error {
 			retention, frequency,
 			minMatchRate, maxMatchRate,
 			termCountBorderRate, termCountBorder,
-			keywords, ignorewords,
+			keywords, ignorewords, customPhrases,
 			readOnly)
 	}
 	if err != nil {
