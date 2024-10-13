@@ -488,13 +488,13 @@ func Test_Analyzer_keywords(t *testing.T) {
 		t.Errorf("%v", err)
 		return
 	}
-	_, ok := a.trans.phrases.members["grp2b grp3b grp4b grp5b uniq003"]
-	if err := utils.GetGotExpErr("'grp2b grp3b grp4b grp5b uniq003' existance", ok, true); err != nil {
+	_, ok := a.trans.phrases.members["* grp2b grp3b grp4b grp5b uniq003"]
+	if err := utils.GetGotExpErr("'* grp2b grp3b grp4b grp5b uniq003' existance", ok, true); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
-	_, ok = a.trans.phrases.members["grp2b grp3b grp4b grp5b *"]
-	if err := utils.GetGotExpErr("'grp2b grp3b grp4b grp5b *' existance", ok, true); err != nil {
+	_, ok = a.trans.phrases.members["* grp2b grp3b grp4b grp5b *"]
+	if err := utils.GetGotExpErr("'* grp2b grp3b grp4b grp5b *' existance", ok, true); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -549,7 +549,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 	line := "Com1, grpa10 Com2 uniq0401 grpa50 uniq0501 <coM3> uniq0601 grpa20 uniq0601"
 	exgroup := "com1 grpa10 com2 * grpa50 * com3 * grpa20 *"
 
-	phraseCnt, _, phrasestr, err := a.trans.tokenizeLine(line, 0, cStageElse, 0, 0)
+	phraseCnt, _, phrasestr, err := a.trans.tokenizeLine(line, 1, 0, cStageElse, 0, 0, true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -596,7 +596,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 		t.Errorf("%v", err)
 		return
 	}
-	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, cStageElse, 0, 0)
+	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 1, 0, cStageElse, 0, 0, true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -627,7 +627,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 
 	line = "com1 grpa10 com2 uniq0401 grpa50 uniq0501 com3 uniq0601 grpa20 uniq0601"
 	exgroup = "com1 * com2 * grpa50 * com3 * grpa20 *"
-	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, cStageElse, 0, 0)
+	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 1, 0, cStageElse, 0, 0, true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -658,7 +658,7 @@ func Test_Analyzer_rearangePhrases(t *testing.T) {
 
 	line = "com1 grpa10 com2 uniq0401 grpa50 uniq0501 com3 uniq0601 grpa20 uniq0601"
 	exgroup = "com1 * com2 * grpa50 * com3 * * *"
-	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 0, cStageElse, 0, 0)
+	phraseCnt, _, phrasestr, err = a.trans.tokenizeLine(line, 1, 0, cStageElse, 0, 0, true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -717,7 +717,7 @@ func Test_Analyzer_customPhrases(t *testing.T) {
 	}
 
 	if _, ok := a.trans.phrases.members["com1 * com2 * grpa50 * com3 * grpa20 *"]; !ok {
-		t.Error("custome phrase not registered")
+		t.Error("custom phrase not registered")
 		return
 	}
 

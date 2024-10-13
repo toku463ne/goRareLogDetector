@@ -218,7 +218,7 @@ func (t *trans) calcPhrasesScore() error {
 	p := *t.phrases
 	phraseScores := make(map[int]float64, 0)
 	for phraseID, line := range p.memberMap {
-		if tokens, err := t.toTermList(line, 0, false); err == nil {
+		if tokens, _, err := t.toTermList(line, 0, false); err == nil {
 			//scores := make([]float64, len(tokens))
 			scores := make([]float64, 0)
 			for _, itemID := range tokens {
@@ -252,7 +252,7 @@ func (t *trans) registerCustomPhrase(phrase string, addCount int,
 		cp.counts[cpID] += addCount
 		return nil
 	}
-	if tokens, err := t.toTermList(phrase, 0, false); err != nil {
+	if tokens, _, err := t.toTermList(phrase, 0, false); err != nil {
 		return err
 	} else {
 		cID := cp.register(phrase, addCount, createEpoch, lastUpdate, lastValue, false)
@@ -404,7 +404,7 @@ func (t *trans) sortTokensByCount(tokens []int) ([]int, []int) {
 	return sortedTerms, sortedCounts
 }
 
-func (t *trans) registerSubject(phraseID int, line string, replaces map[int]string) string {
+func (t *trans) registerSubject(phraseID int, line string, replaces map[string]string) string {
 	if subject, ok := t.subjects[phraseID]; ok {
 		return subject
 	}
@@ -413,7 +413,7 @@ func (t *trans) registerSubject(phraseID int, line string, replaces map[int]stri
 		return line
 	}
 
-	for _, word := range replaces {
+	for word := range replaces {
 		// Use capturing groups to capture delimiters and replace only the word
 		pattern := `(?i)(^|` + cDelimiters + `)(` + regexp.QuoteMeta(word) + `)($|` + cDelimiters + `)`
 		reg := regexp.MustCompile(pattern)
@@ -427,10 +427,13 @@ func (t *trans) registerSubject(phraseID int, line string, replaces map[int]stri
 }
 
 func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
-	addCnt int, minMatchRate, maxMatchRate float64, useCustomPhrase bool) (int, string) {
+	addCnt int, minMatchRate, maxMatchRate float64, useCustomPhrase bool,
+	excludesMap map[string]string) (int, string) {
 	te := t.terms
 	n := len(tokens)
-	excludesMap := make(map[int]string)
+	if excludesMap == nil {
+		excludesMap = make(map[string]string)
+	}
 
 	phrase := make([]int, 0)
 	counts := make([]int, n)
@@ -460,11 +463,22 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 
 		//lastToken := 0
 		if pos >= minLen {
+			freqlen := 0
 			for i, count := range counts {
 				termID := tokens[i]
+
+				//if t.terms.memberMap[termID] == "call-id" {
+				//	print("")
+				//}
+
+				//if strings.Contains(t.terms.memberMap[termID], "ordinary@ims.mnc020.mcc440.3gppnetwork.o") {
+				//	print("")
+				//}
+
 				_, ok := t.keyTermIds[termID]
-				if ok || count >= minCnt {
+				if ok || (count >= minCnt && count >= t.termCountBorder) {
 					phrase = append(phrase, termID)
+					freqlen++
 					//lastToken = termID
 				} else {
 					//if lastToken != cAsteriskItemID {
@@ -473,9 +487,13 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 					//}
 					phrase = append(phrase, cAsteriskItemID)
 					if termID != cAsteriskItemID {
-						excludesMap[termID] = t.terms.getMember(termID)
+						excludesMap[t.terms.getMember(termID)] = ""
 					}
 				}
+			}
+			// avoid phrases like "* * * *"
+			if freqlen < minLen {
+				phrase = tokens
 			}
 		} else {
 			phrase = tokens
@@ -507,17 +525,25 @@ func (t *trans) registerPhrase(tokens []int, lastUpdate int64, lastValue string,
 
 func (t *trans) toTermList(line string,
 	lastUpdate int64,
-	registerItem bool) ([]int, error) {
+	registerItem bool) ([]int, map[string]string, error) {
 	line = t.replacer.Replace(line)
 	words := strings.Split(line, " ")
 	tokens := make([]int, 0)
-
+	excludesMap := make(map[string]string)
+	addCnt := 0
+	if registerItem {
+		addCnt = 1
+	}
 	termID := -1
 
 	for _, w := range words {
 		if w == "" {
 			continue
 		}
+
+		//if strings.Contains(w, "ordinary@ims.mnc020.mcc440.3gppnetwork.o") {
+		//	print("")
+		//}
 
 		if _, ok := t.ignorewords[w]; ok {
 			w = "*"
@@ -531,21 +557,22 @@ func (t *trans) toTermList(line string,
 
 		word := strings.ToLower(w)
 		lenw := len(word)
-		if lenw > cMaxWordLen {
-			word = word[:cMaxWordLen]
-			lenw = cMaxWordLen
-		}
+		//if lenw > cMaxWordLen {
+		//	word = word[:cMaxWordLen]
+		//	lenw = cMaxWordLen
+		//}
 		//remove '.' in the end
 		if lenw > 1 && string(word[lenw-1]) == "." {
 			word = word[:lenw-1]
 		}
 
-		addCnt := 0
-		if registerItem {
-			addCnt = 1
-		}
+		//if word == "call-id" {
+		//	print("")
+		//}
+
 		if keyOK || len(word) > 2 {
 			if !keyOK && utils.IsInt(word) && len(word) > cMaxNumDigits {
+				excludesMap[word] = ""
 				continue
 			}
 			termID = t.terms.register(word, addCnt, lastUpdate, lastUpdate, "", registerItem)
@@ -557,17 +584,19 @@ func (t *trans) toTermList(line string,
 			//} else if word == "*" && len(tokens) > 1 && tokens[len(tokens)-1] != cAsteriskItemID {
 		} else if word == "*" {
 			tokens = append(tokens, cAsteriskItemID)
+		} else {
+			excludesMap[word] = ""
 		}
 	}
 
-	return tokens, nil
+	return tokens, excludesMap, nil
 }
 
 /*
 stage: 1=registerTerm 2=registerPT 3=registerPhrase
 */
-func (t *trans) tokenizeLine(line string, fileEpoch int64, stage int,
-	minMatchRate, maxMatchRate float64) (int, []int, string, error) {
+func (t *trans) tokenizeLine(line string, addCnt int, fileEpoch int64, stage int,
+	minMatchRate, maxMatchRate float64, useCustomPhrases bool) (int, []int, string, error) {
 	var lastdt time.Time
 	var err error
 	phrasestr := ""
@@ -622,7 +651,7 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, stage int,
 
 	t.lastMessage = line
 
-	tokens, err := t.toTermList(line, lastUpdate, registerItem)
+	tokens, excludeMap, err := t.toTermList(line, lastUpdate, registerItem)
 	if err != nil {
 		return -1, nil, "", err
 	}
@@ -639,17 +668,17 @@ func (t *trans) tokenizeLine(line string, fileEpoch int64, stage int,
 		}
 		t.totalLines++
 	case cStageRegisterPT:
-		t.registerPt(tokens, 1)
+		t.registerPt(tokens, addCnt)
 	case cStageRegisterPhrases:
 		if !t.ptRegistered {
 			return -1, nil, "", errors.New("phrase tree not registered")
 		}
 		phraseID := -1
-		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, 1, minMatchRate, maxMatchRate, false)
+		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, addCnt, minMatchRate, maxMatchRate, useCustomPhrases, excludeMap)
 		phraseCnt = t.phrases.getCount(phraseID)
 	default:
 		phraseID := -1
-		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, 0, minMatchRate, maxMatchRate, false)
+		phraseID, phrasestr = t.registerPhrase(tokens, lastUpdate, orgLine, 0, minMatchRate, maxMatchRate, useCustomPhrases, excludeMap)
 		phraseCnt = t.phrases.getCount(phraseID)
 	}
 
@@ -748,7 +777,7 @@ func (t *trans) getTopNScores(N, minCnt int, maxLastUpdate int64,
 func (t *trans) analyzeLine(line string) error {
 	te := t.terms
 
-	_, token, phrasestr, err := t.tokenizeLine(line, 0, cStageElse, 1.0, 0.0)
+	_, token, phrasestr, err := t.tokenizeLine(line, 1, 0, cStageElse, 1.0, 0.0, true)
 	if err != nil {
 		return err
 	}
@@ -798,19 +827,18 @@ func (t *trans) rearangePhrases(termCountBorderRate float64, termCountBorder int
 		return nil
 	}
 
-	p, err := newItems("", "rearranged_phrase", 0, 0, "", false)
-	if err != nil {
-		return err
-	}
-
-	t.subjects = make(map[int]string)
-
 	// if new termCountBorder is equal or less than current, there will be no change
 	oldTermCountBorder := t.termCountBorder
 	t.calcCountBorder(termCountBorderRate, termCountBorder)
 	if t.termCountBorder <= oldTermCountBorder {
 		return nil
 	}
+
+	p, err := newItems("", "rearranged_phrase", 0, 0, "", false)
+	if err != nil {
+		return err
+	}
+	t.subjects = make(map[int]string)
 
 	t.pt = &phraseTree{
 		count:      0,
@@ -824,24 +852,33 @@ func (t *trans) rearangePhrases(termCountBorderRate float64, termCountBorder int
 	t.resetCustomPhrases()
 
 	for _, stage := range []int{cStageRegisterPT, cStageRegisterPhrases} {
-		for phraseID, line := range t.orgPhrases.memberMap {
+		for phraseID, _ := range t.orgPhrases.memberMap {
 			cnt := t.orgPhrases.getCount(phraseID)
 			lastUpdate := t.orgPhrases.getLastUpdate(phraseID)
 			lastValue := t.orgPhrases.getLastValue(phraseID)
 
-			tokens, err := t.toTermList(line, 0, false)
-			if err != nil {
-				return err
-			}
-			if len(tokens) == 0 {
-				return errors.New("found null phrase")
-			}
+			//tokens, excludeMap, err := t.toTermList(line, 0, false)
+			//if err != nil {
+			//	return err
+			//}
+			//if len(tokens) == 0 {
+			//	return errors.New("found null phrase")
+			//}
 
 			switch stage {
 			case cStageRegisterPT:
-				t.registerPt(tokens, cnt)
+				//t.registerPt(tokens, cnt)
+				_, _, _, err := t.tokenizeLine(lastValue, cnt, lastUpdate, cStageRegisterPT, minMatchRate, maxMatchRate, false)
+				if err != nil {
+					return err
+				}
 			case cStageRegisterPhrases:
-				t.registerPhrase(tokens, lastUpdate, lastValue, cnt, minMatchRate, maxMatchRate, true)
+				_, _, _, err := t.tokenizeLine(lastValue, cnt, lastUpdate, cStageRegisterPhrases, minMatchRate, maxMatchRate, true)
+				if err != nil {
+					return err
+				}
+
+				//t.registerPhrase(tokens, lastUpdate, lastValue, cnt, minMatchRate, maxMatchRate, true, excludeMap)
 				//_, phrasestr := t.registerPhrase(tokens, lastUpdate, lastValue, cnt, 0, 0)
 				//expected := "invite sip * user phone * udp sip 2.0 * application * sip * user phone from * sip * user phone tag * sip * user phone * max-forwards allow invite ack options bye cancel update * supported * timer * call-id * cseq invite user-agent tbsip contact sip * via sip 2.0 udp * branch * content-length * ip4 * ip4 * rtpmap * --- sip 2.0 * via sip 2.0 udp * branch * sip * user phone from * sip * user phone tag * call-id * cseq invite server * content-length --- sip 2.0 * via sip 2.0 udp * branch * sip 127.0.0.1 ftag * did * sip * ftag * did * sip * from * sip * user phone tag * sip * user phone tag * call-id * cseq invite contact sip * udp user-agent * application * allow invite ack bye cancel options * update * timer supported timer * application * content-length * sip * ip4 * ip4 * rtpmap * --- ack sip * udp sip 2.0 sip * user phone tag * from * sip * user phone tag * max-forwards cseq ack call-id * sip * sip * ftag * did * sip 127.0.0.1 ftag * did * user-agent tbsip via sip 2.0 udp * branch * content-length --- bye sip * udp sip 2.0 sip * user phone tag * from * sip * user phone tag * call-id * cseq bye * sip * sip * ftag * did * sip 127.0.0.1 ftag * did * max-forwards user-agent tbsip via sip 2.0 udp * branch * content-length --- sip 2.0 * via sip 2.0 udp * branch * from * sip * user phone tag * sip * user phone tag * call-id * cseq bye user-agent * allow invite ack bye cancel options * update * supported timer * content-length"
 				//if phrasestr == expected {
@@ -850,7 +887,7 @@ func (t *trans) rearangePhrases(termCountBorderRate float64, termCountBorder int
 			}
 		}
 
-		if cStageRegisterPT == 1 {
+		if cStageRegisterPT == stage {
 			t.ptRegistered = true
 		}
 	}
@@ -977,6 +1014,7 @@ func (t *trans) outputPhrasesHistory(
 		return nil
 	}
 
+	t.subjects = make(map[int]string)
 	minTime := int64(0)
 	maxTime := int64(0)
 	first := true
@@ -996,12 +1034,35 @@ func (t *trans) outputPhrasesHistory(
 		//	println("here")
 		//}
 
-		tokens, err := t.toTermList(item, lastUpdate, false)
+		//tokens, excludeMap, err := t.toTermList(item, lastUpdate, false)
+		//if err != nil {
+		//	return err
+		//}
+
+		//phraseID, _ := t.registerPhrase(tokens, lastUpdate, lastValue, 0, minMatchRate, maxMatchRate, true, excludeMap)
+
+		//if strings.Contains(lastValue, "ordinary@ims.mnc020.mcc440.3gppnetwork.o") {
+		//	print("")
+		//}
+
+		t.ptRegistered = true
+		_, _, phrasestr, err := t.tokenizeLine(lastValue, itemCount, lastUpdate, cStageRegisterPhrases, minMatchRate, maxMatchRate, true)
 		if err != nil {
 			return err
 		}
+		phraseID := t.phrases.getItemID(phrasestr)
 
-		phraseID, _ := t.registerPhrase(tokens, lastUpdate, lastValue, 0, minMatchRate, maxMatchRate, true)
+		//if strings.Contains(lastValue, "ordinary@ims.mnc020.mcc440.3gppnetwork.o") {
+		//	_, _, phrasestr2, err := t.tokenizeLine(item, lastUpdate, cStageRegisterPhrases, minMatchRate, maxMatchRate)
+		//	if err != nil {
+		//		return err
+		//	}
+		//	phraseID2 := t.phrases.getItemID(phrasestr2)
+		//	if phraseID != phraseID2 {
+		//		print("")
+		//	}
+		//}
+
 		if _, ok := rankMap[phraseID]; !ok {
 			continue
 		}
@@ -1030,7 +1091,7 @@ func (t *trans) outputPhrasesHistory(
 		}
 		if phraseCnt != sum {
 			//return fmt.Errorf("count of phrase does not much. rank index=%d", i)
-			fmt.Printf("count of phrase does not much. rank index=%d", i)
+			fmt.Printf("count of phrase does not much. rank index=%d\n", i)
 		}
 	}
 

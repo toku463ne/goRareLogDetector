@@ -6,7 +6,7 @@ var (
 			"retention", "frequency",
 			"minMatchRate", "maxMatchRate",
 			"termCountBorderRate", "termCountBorder",
-			"logFormat"},
+			"timestampLayout", "logFormat"},
 		"lastStatus": {"lastRowID", "lastFileEpoch", "lastFileRow"},
 		"items":      {"count", "createEpoch", "lastUpdate", "item", "lastValue"},
 	}

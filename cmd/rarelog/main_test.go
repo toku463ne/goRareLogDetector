@@ -26,7 +26,7 @@ func Test_main_config(t *testing.T) {
 	main()
 
 	dataDir := fmt.Sprintf("%s/data", rootDir)
-	a, err := rarelogdetector.NewAnalyzer2(dataDir, searchStrings, excludeStrings, true)
+	a, err := rarelogdetector.NewAnalyzer2(dataDir, searchStrings, excludeStrings, 0, 0, nil, true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -73,8 +73,8 @@ func Test_real_sugcap(t *testing.T) {
 
 func Test_real_sugcap2(t *testing.T) {
 	//conf := "/home/ubuntu/logandata/openvpn.yml"
-	conf := "/home/administrator/tests/sugcap2/sugcap.yml"
-	os.Args = []string{"rarelog", "-m", "outputPhrasesHistory", "-c", conf, "-biggestN", "5", "-R", "0.6", "-o", "/tmp/out"}
+	conf := "/home/ubuntu/tests/capdata/sugcap.yml"
+	os.Args = []string{"rarelog", "-m", "outputPhrasesHistory", "-c", conf, "-biggestN", "100", "-o", "/tmp/out"}
 	main()
 }
 

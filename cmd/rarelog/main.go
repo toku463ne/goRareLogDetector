@@ -245,6 +245,9 @@ func loadConfig(path string) error {
 	if termCountBorderRate == 0 {
 		termCountBorderRate = c.TermCountBorderRate
 	}
+	if termCountBorder == 0 {
+		termCountBorder = c.TermCountBorder
+	}
 	if keywords == nil {
 		keywords = c.Keywords
 	}
@@ -303,7 +306,11 @@ func run() error {
 	tblDir := fmt.Sprintf("%s/config.tbl.ini", dataDir)
 	if utils.PathExist(tblDir) {
 		logrus.Infof("Loading config from %s\n", tblDir)
-		a, err = rarelogdetector.NewAnalyzer2(dataDir, searchStrings, excludeStrings, readOnly)
+		a, err = rarelogdetector.NewAnalyzer2(dataDir,
+			searchStrings, excludeStrings,
+			termCountBorderRate, termCountBorder,
+			customPhrases,
+			readOnly)
 	} else {
 		a, err = rarelogdetector.NewAnalyzer(dataDir, logPath, logFormat, timestampLayout,
 			searchStrings, excludeStrings,

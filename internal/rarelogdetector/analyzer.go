@@ -113,10 +113,20 @@ func NewAnalyzer(dataDir, logPath, logFormat, timestampLayout string,
 
 func NewAnalyzer2(dataDir string,
 	searchRegex, exludeRegex []string,
+	termCountBorderRate float64, termCountBorder int,
+	customPhrases []string,
 	readOnly bool) (*Analyzer, error) {
 	a := new(Analyzer)
 	a.dataDir = dataDir
 	a.setFilters(searchRegex, exludeRegex)
+	if termCountBorderRate == 0 {
+		a.termCountBorderRate = cTermCountBorderRate
+	} else {
+		a.termCountBorderRate = termCountBorderRate
+	}
+	a.termCountBorder = termCountBorder
+	a.customPhrases = customPhrases
+
 	a.readOnly = readOnly
 	if err := a.open(); err != nil {
 		return nil, err
@@ -275,6 +285,7 @@ func (a *Analyzer) loadStatus() error {
 		&a.minMatchRate, &a.maxMatchRate,
 		&a.termCountBorderRate,
 		&a.termCountBorder,
+		&a.timestampLayout,
 		&a.logFormat); err != nil {
 		return err
 	}
@@ -363,6 +374,7 @@ func (a *Analyzer) saveConfig() error {
 		"maxMatchRate":        a.maxMatchRate,
 		"termCountBorderRate": a.termCountBorderRate,
 		"termCountBorder":     a.termCountBorder,
+		"timestampLayout":     a.timestampLayout,
 		"logFormat":           a.logFormat,
 	}); err != nil {
 		return err
@@ -518,7 +530,7 @@ func (a *Analyzer) Detect(termCountBorderRate float64, termCountBorder int) ([]p
 	}
 	p := a.trans.phrases
 	for i := range results {
-		phraseID, phraseStr := a.trans.registerPhrase(results[i].tokens, 0, "", 0, a.minMatchRate, a.maxMatchRate, true)
+		phraseID, phraseStr := a.trans.registerPhrase(results[i].tokens, 0, "", 0, a.minMatchRate, a.maxMatchRate, true, nil)
 		results[i].count = p.getCount(phraseID)
 		results[i].phrasestr = phraseStr
 	}
@@ -638,9 +650,6 @@ func (a *Analyzer) OutputPhrases(termCountBorderRate float64, termCountBorder in
 func (a *Analyzer) OutputPhrasesHistory(termCountBorderRate float64, termCountBorder int,
 	biggestN int,
 	delim, outfile string) error {
-	if termCountBorderRate == 0 {
-		termCountBorderRate = a.termCountBorderRate
-	}
 	if err := a.trans.outputPhrasesHistory(termCountBorderRate, termCountBorder,
 		a.minMatchRate, a.maxMatchRate,
 		biggestN,
@@ -670,8 +679,8 @@ func (a *Analyzer) _run(targetLinesCnt int,
 			continue
 		}
 
-		_, tokens, _, err := a.trans.tokenizeLine(te, a.fp.CurrFileEpoch(), stage,
-			a.minMatchRate, a.maxMatchRate)
+		_, tokens, _, err := a.trans.tokenizeLine(te, 1, a.fp.CurrFileEpoch(), stage,
+			a.minMatchRate, a.maxMatchRate, false)
 		if err != nil {
 			return nil, err
 		}

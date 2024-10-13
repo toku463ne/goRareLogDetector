@@ -109,15 +109,20 @@ func (i *items) register(item string, addCount int,
 		}
 	}
 
-	if addCount == 0 {
-		return itemID
+	if _, ok := i.counts[itemID]; !ok {
+		i.counts[itemID] = addCount
+	} else {
+		i.counts[itemID] += addCount
 	}
 
 	i.lastValues[itemID] = lastValue
 
-	i.counts[itemID] += addCount
 	if isNew {
-		i.currCounts[itemID] += addCount
+		if _, ok := i.currCounts[itemID]; !ok {
+			i.currCounts[itemID] = addCount
+		} else {
+			i.currCounts[itemID] += addCount
+		}
 	}
 	i.totalCount += addCount
 	return itemID

@@ -20,7 +20,7 @@ func Test_tokenizeLine(t *testing.T) {
 	tr.ptRegistered = true
 
 	line := "Jul 31 20:24:33 192.168.67.51 openvpn[12781]: 125.30.90.192:1194 peer info: IV_LZ4=1"
-	if _, _, phrasestr, err = tr.tokenizeLine(line, 1, cStageElse, 0.6, 0.0); err != nil {
+	if _, _, phrasestr, err = tr.tokenizeLine(line, 1, 0, cStageElse, 0.6, 0.0, true); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -58,7 +58,7 @@ func Test_tokenizeLine(t *testing.T) {
 	tr.ptRegistered = true
 
 	line = `2024-08-01T21:51:08+09:00 from:"x.x.x.11" user:"-" via:"node01:8081" to:"x.x.x.41:81" r:"GET / HTTP/1.1" st:"401" srv:"qaapi.test.com"`
-	if _, _, phrasestr, err = tr.tokenizeLine(line, 0, cStageElse, 0.6, 0.0); err != nil {
+	if _, _, phrasestr, err = tr.tokenizeLine(line, 1, 0, cStageElse, 0.6, 0.0, true); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -94,7 +94,7 @@ func Test_tokenizeLine(t *testing.T) {
 	tr.ptRegistered = true
 
 	line = "Jul 31 20:24:33 192.168.67.51 openvpn[12781]: 125.30.90.192:1194 peer info: IV_LZ4=1"
-	if _, _, phrasestr, err = tr.tokenizeLine(line, 0, cStageElse, 0.6, 0.0); err != nil {
+	if _, _, phrasestr, err = tr.tokenizeLine(line, 1, 0, cStageElse, 0.6, 0.0, true); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
@@ -123,7 +123,7 @@ func Test_tokenizeLine_regex(t *testing.T) {
 	tr.ptRegistered = true
 
 	line := "Jul 31 20:24:33 192.168.67.51 openvpn[12781]: 125.30.90.192:1194 peer info: IV_LZ4=1"
-	if _, _, phrasestr, err = tr.tokenizeLine(line, 0, cStageElse, 0.6, 0.0); err != nil {
+	if _, _, phrasestr, err = tr.tokenizeLine(line, 1, 0, cStageElse, 0.6, 0.0, true); err != nil {
 		t.Errorf("%v", err)
 		return
 	}
